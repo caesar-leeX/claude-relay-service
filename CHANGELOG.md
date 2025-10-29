@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.188] - 2025-10-30
+
+### Fixed
+
+- **[Code Quality] 修复 ESLint 正则表达式不必要的转义错误**
+  - **问题**: `codexCliValidator.js` 和 `geminiCliValidator.js` 中的正则表达式 `[\d\.]+` 使用了不必要的反斜杠转义，违反 ESLint `no-useless-escape` 规则
+  - **修复内容**:
+    - `src/validators/clients/codexCliValidator.js:45`: `/^(codex_vscode|codex_cli_rs)\/[\d\.]+/i` → `/^(codex_vscode|codex_cli_rs)\/[\d.]+/i`
+    - `src/validators/clients/geminiCliValidator.js:56`: `/^GeminiCLI\/v?[\d\.]+/i` → `/^GeminiCLI\/v?[\d.]+/i`
+  - **理论依据**: 在字符类 `[]` 中，`.` 是字面字符，不是特殊元字符，不需要转义
+  - **验证**: 所有测试用例验证修改前后正则表达式行为完全一致，功能零影响
+  - **影响**: 纯代码质量改进，消除 ESLint 错误，不改变任何运行时行为
+
 ## [1.1.187] - 2025-10-30
 
 ### Fixed
