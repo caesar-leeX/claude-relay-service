@@ -5,6 +5,64 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.187] - 2025-10-30
+
+### Fixed
+
+- **[OpenAI/Codex API] 支持用户自定义 system message**
+  - **问题**: openaiRoutes.js 和 openaiToClaude.js 强制覆盖用户的 system message，导致无法自定义模型行为
+  - **修复内容**:
+    - `openaiRoutes.js`: 从标准 OpenAI `messages` 数组中提取 system message，转换为 Codex API 的 `instructions` 字段
+    - `openaiToClaude.js`: 优先使用用户提供的 system message，否则使用 Claude Code 默认提示词
+  - **向后兼容**: 完全保持向后兼容
+    - 如果用户提供了 system message → 使用用户自定义内容
+    - 如果没有 system message → 使用原默认指令（Codex CLI 或 Claude Code）
+  - **影响范围**:
+    - ✅ 标准 GPT-5 API 请求现在支持自定义 system message
+    - ✅ Codex CLI 请求完全不受影响
+    - ✅ OpenAI 到 Claude 的转换支持自定义 system message
+  - **测试建议**:
+    ```bash
+    # 测试自定义 system message
+    curl -X POST http://localhost:3000/api/v1/chat/completions \
+      -H "Authorization: Bearer <your-api-key>" \
+      -H "Content-Type: application/json" \
+      -d '{
+        "model": "gpt-5",
+        "messages": [
+          {"role": "system", "content": "You are a Python expert."},
+          {"role": "user", "content": "Write hello world"}
+        ]
+      }'
+    ```
+  - **关联文件**:
+    - `src/routes/openaiRoutes.js`: Line 267-302
+    - `src/services/openaiToClaude.js`: Line 37-49
+
+- **[OpenAI Routes] 修复多个 system messages 处理不一致问题**
+  - **问题**: openaiRoutes.js 只取第一个 system message（使用 `.find()`），与 openaiToClaude.js 的 `_extractSystemMessage()` 方法不一致（使用 `.filter()` + `.join()`），可能导致多个 system messages 时丢失用户内容
+  - **修复内容**: 修改 openaiRoutes.js Line 268-272，改为合并所有 system messages（用 `\n\n` 连接），与 openaiToClaude.js 的逻辑保持完全一致
+  - **文档依据**:
+    - Claude Messages API：`system` 参数是单个字符串（官方文档：`string | Text · object[]`）
+    - Codex API：`instructions` 字段是单个字符串（GPT-5 Prompting Guide）
+    - OpenAI Chat Completions API：技术上支持多个 system messages，但标准做法是单个或合并为一个
+  - **影响**:
+    - ✅ 单个 system message 行为完全不变（99% 的常见场景）
+    - ✅ 多个 system messages 从"仅取第一个"改为"全部合并"（边缘场景改进）
+    - ✅ 与 openaiToClaude.js 代码逻辑统一，提升可维护性
+  - **代码变更**:
+    ```javascript
+    // 修改前（只取第一个）
+    const systemMessage = req.body.messages?.find((m) => m.role === 'system')?.content
+
+    // 修改后（合并所有）
+    const systemMessages = req.body.messages?.filter((m) => m.role === 'system') || []
+    const systemMessage = systemMessages.length > 0
+      ? systemMessages.map((m) => m.content).join('\n\n')
+      : null
+    ```
+  - **关联文件**: `src/routes/openaiRoutes.js`: Line 268-272
+
 ## [1.1.186] - 2025-10-30
 
 ### Changed
