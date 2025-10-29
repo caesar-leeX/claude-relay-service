@@ -38,9 +38,7 @@ class OpenAIToClaudeConverter {
     if (systemMessage) {
       // 使用用户提供的系统提示词
       claudeRequest.system = systemMessage
-      logger.debug(
-        `📋 Using custom system prompt (${systemMessage.length} chars)`
-      )
+      logger.debug(`📋 Using custom system prompt (${systemMessage.length} chars)`)
       logger.debug(`📋 System prompt preview: ${systemMessage.substring(0, 150)}...`)
     } else {
       // 使用 Claude Code 默认系统提示词
