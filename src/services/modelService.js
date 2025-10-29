@@ -7,7 +7,6 @@ const logger = require('../utils/logger')
  * 管理系统支持的 AI 模型列表
  * 与 pricingService 独立，专注于"支持哪些模型"而不是"如何计费"
  *
- * @version 1.1.184
  */
 class ModelService {
   constructor() {
