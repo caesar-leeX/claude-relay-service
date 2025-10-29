@@ -5,6 +5,79 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.185] - 2025-10-30
+
+### Changed
+
+- **[Major] 升级 Node.js 到 22 LTS 版本**
+  - **变更内容**: 将项目的 Node.js 基础版本从 18 LTS 升级到 22 LTS
+  - **影响范围**:
+    - Dockerfile: 前端构建阶段和主应用阶段均使用 `node:22-alpine`
+    - package.json: 引擎要求从 `>=18.0.0` 升级到 `>=22.0.0`
+    - CI/CD 工作流: GitHub Actions 使用 Node.js 22 进行构建和测试
+    - 文档: README.md 和 README_EN.md 中所有 Node.js 18 引用更新为 22
+    - 安装脚本: Ubuntu/Debian 和 CentOS/RHEL 安装命令更新为 setup_22.x
+  - **升级原因**:
+    - Node.js 22 LTS (代号 "Jod") 于 2024年10月29日发布，成为新的长期支持版本
+    - 提供更好的性能优化和安全性改进
+    - 确保项目使用最新的稳定版本，获得官方长期支持（Active LTS 至 2025年10月，维护至 2027年4月）
+  - **兼容性**: Node.js 22 完全向后兼容 Node.js 18 的代码，无需修改应用逻辑
+  - **向后兼容**: 是，现有功能不受影响，仅基础环境升级
+
+- **改进 CI/CD 工作流版本管理机制**
+  - **变更内容**: 移除自动版本递增逻辑，改为直接使用 VERSION 文件作为单一来源
+  - **变更原因**: 避免自动版本递增与手动版本控制冲突
+  - **影响范围**: `.github/workflows/auto-release-pipeline.yml`
+  - **修改详情**:
+    - 删除"Get current version"步骤（获取标签版本和文件版本并比较）
+    - 删除"Calculate next version"步骤（自动 PATCH +1 递增）
+    - 删除"Update VERSION file"步骤（写回新版本到文件）
+    - 新增"Get version from VERSION file"步骤，直接读取并验证 VERSION 文件
+    - 新增版本格式验证（正则表达式检查 x.y.z 格式）
+    - 新增标签存在性检查（防止重复发布）
+  - **向后兼容**: 是，工作流改进不影响应用功能
+
+### Fixed
+
+- **[包含 v1.1.184 修复] 修复 OpenAI 兼容端点忽略用户自定义 system 消息的问题**
+  - **问题描述**: 通过 OpenAI 兼容端点发送带有自定义 `system` 角色消息的请求时，用户的系统提示词被强制替换为 Claude Code 默认提示词，导致模型无法按照用户期望的角色行为
+  - **修复内容**: 移除硬编码逻辑，现在直接使用用户提供的 system 消息内容
+  - **修复文件**: `src/services/openaiToClaude.js`
+
+- **[包含 v1.1.184 修复] 修复 modelService.js 白名单缺少 gpt-5 系列模型的问题**
+  - **问题描述**: 默认支持的模型列表中缺少 `gpt-5` 和 `gpt-5-codex`，导致客户端无法通过模型列表发现它们
+  - **修复内容**: 在 `src/services/modelService.js` 默认配置中添加 `gpt-5` 和 `gpt-5-codex`
+  - **修复效果**: 客户端现在可以正确发现这些模型，UI 模型选择器会显示这些选项
+
+- **[包含 v1.1.184 修复] 修复 Codex 账户失效后持续返回403错误无法自动切换的问题**
+  - **问题描述**: 当 Codex 账号 refresh token 失效后，API 返回 403 Forbidden 错误，但系统未标记账户为不可用状态，导致持续选择该失效账户
+  - **修复内容**:
+    - 在 `src/services/openaiResponsesRelayService.js` 中添加 403/422 错误处理
+    - 在 `src/services/unifiedOpenAIScheduler.js` 共享池筛选中添加 `unauthorized` 状态过滤
+  - **修复效果**: 账户失效后立即被标记为不可用，后续请求自动切换到其他正常账户
+
+### Technical Details
+
+- **Node.js 22 LTS 信息**:
+  - 版本代号: "Jod"
+  - LTS 开始日期: 2024-10-29
+  - Active LTS 支持期: 至 2025-10-21
+  - Maintenance 维护期: 至 2027-04-30
+  - 官方页面: https://nodejs.org/en/about/previous-releases
+
+- **修改文件列表**:
+  - `Dockerfile` (2 处: 前端构建器 + 主应用阶段)
+  - `package.json` (1 处: engines 字段)
+  - `.github/workflows/auto-release-pipeline.yml` (2 处: 版本管理逻辑 + Node.js 版本)
+  - `.github/workflows/pr-lint-check.yml` (1 处: Node.js 版本)
+  - `README.md` (6 处: 徽章 + 文本引用 + 安装脚本)
+  - `README_EN.md` (4 处: 徽章 + 文本引用 + 安装脚本)
+  - `VERSION` (1 处: 1.1.184 → 1.1.185)
+
+- **版本说明**: v1.1.185 包含 v1.1.184 的所有修复（因 v1.1.184 CI/CD 失败未完成 Docker 镜像构建）
+
+---
+
 ## [1.1.184] - 2025-10-30
 
 ### Fixed
