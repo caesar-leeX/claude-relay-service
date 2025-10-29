@@ -524,6 +524,18 @@ npm run setup  # 自动生成密钥并创建管理员账户
 - 禁用Nagle算法确保数据立即发送（socket.setNoDelay）
 - 设置 `X-Accel-Buffering: no` 禁用Nginx缓冲
 
+### 工具使用
+
+#### 文档工具
+
+1. **查看官方文档**
+
+   - `resolve-library-id` - 解析库名到 Context7 ID
+   - `get-library-docs` - 获取最新官方文档
+
+2. **搜索真实代码**
+   - `searchGitHub` - 搜索 GitHub 上的实际使用案例
+
 ### CLI 工具使用示例
 
 ```bash

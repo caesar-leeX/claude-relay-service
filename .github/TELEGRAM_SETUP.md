@@ -70,8 +70,8 @@
 - fix: 修复某个问题
 
 🐳 Docker 部署:
-docker pull weishaw/claude-relay-service:v1.1.3
-docker pull weishaw/claude-relay-service:latest
+docker pull caesarlee888777/claude-relay-service:v1.1.3
+docker pull caesarlee888777/claude-relay-service:latest
 
 🔗 相关链接:
 • GitHub Release

@@ -264,6 +264,13 @@ const handleResponses = async (req, res) => {
 
     // 如果不是 Codex CLI 请求，则进行适配
     if (!isCodexCLI) {
+      // 自动转换标准 OpenAI 格式（messages）到 Codex 格式（input）
+      if (req.body.messages && !req.body.input) {
+        req.body.input = req.body.messages
+        delete req.body.messages
+        logger.info('📝 Converted messages → input for Codex API compatibility')
+      }
+
       // 移除不需要的请求体字段
       const fieldsToRemove = [
         'temperature',

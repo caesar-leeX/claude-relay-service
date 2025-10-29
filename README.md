@@ -6,8 +6,8 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Redis](https://img.shields.io/badge/Redis-6+-red.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
-[![Docker Build](https://github.com/Wei-Shaw/claude-relay-service/actions/workflows/auto-release-pipeline.yml/badge.svg)](https://github.com/Wei-Shaw/claude-relay-service/actions/workflows/auto-release-pipeline.yml)
-[![Docker Pulls](https://img.shields.io/docker/pulls/weishaw/claude-relay-service)](https://hub.docker.com/r/weishaw/claude-relay-service)
+[![Docker Build](https://github.com/caesar-leeX/claude-relay-service/actions/workflows/auto-release-pipeline.yml/badge.svg)](https://github.com/caesar-leeX/claude-relay-service/actions/workflows/auto-release-pipeline.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/caesarlee888777/claude-relay-service)](https://hub.docker.com/r/caesarlee888777/claude-relay-service)
 
 **🔐 自行搭建Claude API中转服务，支持多账户管理**
 
@@ -211,7 +211,7 @@ sudo systemctl start redis
 
 ```bash
 # 下载项目
-git clone https://github.com/Wei-Shaw//claude-relay-service.git
+git clone https://github.com/caesar-leeX/claude-relay-service.git
 cd claude-relay-service
 
 # 安装依赖

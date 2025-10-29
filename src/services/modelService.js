@@ -87,6 +87,8 @@ class ModelService {
           'gpt-4-turbo',
           'gpt-4',
           'gpt-3.5-turbo',
+          'gpt-5',
+          'gpt-5-codex',
           'o3',
           'o4-mini',
           'chatgpt-4o-latest'
