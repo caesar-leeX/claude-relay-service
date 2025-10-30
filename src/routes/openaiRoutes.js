@@ -782,6 +782,12 @@ const handleResponses = async (req, res) => {
                   // 完成事件 - 尝试多种提取路径
                   if (eventData.response.text) {
                     // 路径1: response.text (DEBUG 日志显示存在此字段)
+                    logger.info('🔍 DEBUG response.text structure:', {
+                      textType: typeof eventData.response.text,
+                      textValue: JSON.stringify(eventData.response.text),
+                      isArray: Array.isArray(eventData.response.text),
+                      textKeys: typeof eventData.response.text === 'object' ? Object.keys(eventData.response.text) : null
+                    })
                     fullContent += eventData.response.text
                   } else if (eventData.response.output && Array.isArray(eventData.response.output)) {
                     // 路径2: response.output[] (旧逻辑)
