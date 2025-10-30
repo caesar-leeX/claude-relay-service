@@ -2,7 +2,7 @@ name: 同步模型价格数据
 
 on:
   schedule:
-    - cron: '*/10 * * * *'
+    - cron: '0 */6 * * *' # 改为每6小时运行一次，减少 GitHub Actions 配额消耗
   workflow_dispatch: {}
 
 jobs:
@@ -11,11 +11,22 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: 检出 price-mirror 分支
+      - name: 检出仓库
         uses: actions/checkout@v4
         with:
-          ref: price-mirror
           fetch-depth: 0
+
+      - name: 检查或创建 price-mirror 分支
+        run: |
+          set -euo pipefail
+          # 检查远程是否有 price-mirror 分支
+          if git ls-remote --exit-code --heads origin price-mirror; then
+            echo "price-mirror 分支存在，切换到该分支"
+            git checkout price-mirror
+          else
+            echo "price-mirror 分支不存在，创建新分支"
+            git checkout -b price-mirror
+          fi
 
       - name: 下载上游价格文件
         id: fetch
@@ -55,8 +66,15 @@ jobs:
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add model_prices_and_context_window.json model_prices_and_context_window.sha256
           COMMIT_MSG="chore: 同步模型价格数据"
-          if [ -n "${NEW_HASH}" ]; then
-            COMMIT_MSG="$COMMIT_MSG (${NEW_HASH})"
+          if [ -n "${NEW_HASH:-}" ]; then
+            COMMIT_MSG="$COMMIT_MSG (${NEW_HASH:0:8})"
           fi
-          git commit -m "$COMMIT_MSG"
-          git push origin price-mirror
+          git commit -m "$COMMIT_MSG" || echo "没有变更需要提交"
+
+          # 使用 -u 确保首次推送能成功设置上游分支
+          if git ls-remote --exit-code --heads origin price-mirror; then
+            git push origin price-mirror
+          else
+            echo "首次推送 price-mirror 分支"
+            git push -u origin price-mirror
+          fi

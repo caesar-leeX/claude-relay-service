@@ -5,6 +5,96 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.192] - 2025-10-30
+
+### Added
+
+- **[Claude Console] 完整的并发控制机制** (来自上游 v1.1.189)
+  - **功能**: 为 Claude Console 账户实现原子性并发任务数控制，防止单账户过载
+  - **核心特性**:
+    - 🔒 **原子性并发控制**: 基于 Redis Sorted Set 实现的抢占式并发槽位管理，防止竞态条件
+    - 🔄 **自动租约刷新**: 流式请求每 5 分钟自动刷新租约，防止长连接租约过期
+    - 🚨 **智能降级处理**: 并发满额时自动清理粘性会话并重试其他账户（最多 1 次）
+    - 🎯 **专用错误码**: 引入 `CONSOLE_ACCOUNT_CONCURRENCY_FULL` 错误码，区分并发限制和其他错误
+    - 📊 **批量性能优化**: 调度器使用 Promise.all 并行查询账户并发数，减少 Redis 往返
+  - **后端实现**:
+    - `src/models/redis.js`: 新增 4 个并发控制方法（增加/释放/刷新/查询并发数）
+    - `src/services/claudeConsoleAccountService.js`: 添加 `maxConcurrentTasks` 字段（默认 0 表示无限制）
+    - `src/services/claudeConsoleRelayService.js`: 请求前原子性抢占槽位，确保 finally 块释放
+    - `src/services/unifiedClaudeScheduler.js`: 批量查询并发数，预检查并发限制
+    - `src/routes/api.js`: 捕获并发满额错误，自动重试（最多 1 次）
+    - `src/routes/admin.js`: 创建/更新账户时验证 `maxConcurrentTasks` 为非负整数
+  - **前端实现**:
+    - `web/admin-spa/src/components/accounts/AccountForm.vue`: 添加"最大并发任务数"输入框
+    - `web/admin-spa/src/views/AccountsView.vue`: 账户列表显示实时并发进度条和百分比
+  - **使用方式**: 在 Web 管理界面为 Console 账户设置 `maxConcurrentTasks`（如 5），超过限制会自动选择其他账户
+  - **影响范围**: Claude Console 账户的稳定性和负载均衡显著提升
+  - **作者**: sususu98 <suchangshan@foxmail.com>
+  - **提交**: 1458d609
+
+### Fixed
+
+- **[OpenAI Responses] 修复 gpt-5 模型非流式请求的兼容性问题**
+  - **问题**: n8n 等客户端使用 `stream: false` 请求 gpt-5 模型时，后端 Codex API 强制要求 `stream: true`，导致返回 400 错误 "Stream must be set to true"
+  - **修复内容**: 实现服务端 SSE 流到非流式 JSON 的自动转换
+  - **核心特性**:
+    - 🔍 **智能检测**: 自动检测 gpt-5/gpt-5-codex 模型的 `stream: false` 请求
+    - 🔄 **透明转换**: 向后端强制使用 `stream: true`，收集完整 SSE 响应后转换为标准 OpenAI JSON 格式
+    - 📊 **格式标准化**: 将 Codex API 的 `input_tokens/output_tokens` 转换为标准的 `prompt_tokens/completion_tokens`
+    - ✅ **完全兼容**: 不影响现有 Codex CLI 客户端和其他流式请求
+    - 📝 **完整日志**: 添加转换过程的详细日志标记（`🔄 Enabling stream-to-non-stream conversion`）
+  - **技术实现**:
+    - 检测逻辑（258-272行）: 识别需要转换的请求并设置标志
+    - 响应头处理（573-600行）: 转换模式使用 `application/json`，真实流式保持 `text/event-stream`
+    - 数据收集（716-742行）: 转换模式收集完整 buffer，真实流式立即转发
+    - SSE 转换（747-860行）: 解析 SSE 事件提取内容和 usage，构建标准 OpenAI 响应格式
+  - **性能影响**:
+    - 仅影响 gpt-5 非流式请求（约 0.5-2 秒延迟，需等待完整流）
+    - 内存开销：约 1-10MB per request（取决于响应大小）
+  - **使用统计**: 正常记录 token 使用量和成本计算
+  - **影响范围**: 完全解决 n8n AI Agent 使用 gpt-5 的 400 错误问题
+  - **关联文件**: `src/routes/openaiRoutes.js`
+
+- **[Security] 错误消息清理范围扩展到所有字符串字段** (来自上游 v1.1.189)
+  - **问题**: 之前仅清理 `message` 字段，`error_message` 等其他字段可能泄露敏感信息
+  - **修复内容**: 将错误清理从仅 `key === 'message'` 扩展到所有字符串类型字段
+  - **代码变更**:
+
+    ```javascript
+    // 修改前：只清理 message 字段
+    if (key === 'message' && typeof obj[key] === 'string') {
+
+    // 修改后：清理所有字符串字段
+    if (typeof obj[key] === 'string') {
+    ```
+
+  - **影响**: 更彻底地防止敏感域名和信息泄露
+  - **关联文件**: `src/utils/errorSanitizer.js`
+  - **作者**: sususu98 <suchangshan@foxmail.com>
+  - **提交**: 42fc164f
+
+- **[Security] 添加 yes.vg 域名清理** (来自上游 v1.1.189)
+  - **功能**: 在错误消息清理正则表达式中添加 `yes.vg` 域名过滤
+  - **代码变更**: `cleaned = cleaned.replace(/yes.vg\S*/gi, '')`
+  - **影响**: 防止 yes.vg 相关敏感信息在错误响应中泄露
+  - **关联文件**: `src/utils/errorSanitizer.js`
+  - **作者**: sususu <suchangshan@foxmail.com>
+  - **提交**: fd270509
+
+- **[UI] 修复编辑 Console 账户时并发限制被重置的问题** (来自上游 v1.1.189)
+  - **问题**: 编辑 Claude Console 账户时，`maxConcurrentTasks` 字段未被表单读取，导致保存后重置为默认值
+  - **修复内容**: 表单加载时先读取 `maxConcurrentTasks` 并显示，确保编辑时保留原配置
+  - **影响**: 用户编辑账户其他字段时，不会意外重置并发限制配置
+  - **关联文件**: `web/admin-spa/src/components/accounts/AccountForm.vue`
+  - **作者**: sususu98 <suchangshan@foxmail.com>
+  - **提交**: 3abd0b0f
+
+### Changed
+
+- **[Version] 更新版本号到 v1.1.192**
+  - 合并上游 v1.1.189 和 v1.1.190 的所有功能和修复
+  - 保留本地独有功能（v1.1.187 用户自定义 system message、v1.1.186 Node.js 24 LTS 等）
+
 ## [1.1.188] - 2025-10-30
 
 ### Fixed
@@ -64,16 +154,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
     - ✅ 多个 system messages 从"仅取第一个"改为"全部合并"（边缘场景改进）
     - ✅ 与 openaiToClaude.js 代码逻辑统一，提升可维护性
   - **代码变更**:
+
     ```javascript
     // 修改前（只取第一个）
     const systemMessage = req.body.messages?.find((m) => m.role === 'system')?.content
 
     // 修改后（合并所有）
     const systemMessages = req.body.messages?.filter((m) => m.role === 'system') || []
-    const systemMessage = systemMessages.length > 0
-      ? systemMessages.map((m) => m.content).join('\n\n')
-      : null
+    const systemMessage =
+      systemMessages.length > 0 ? systemMessages.map((m) => m.content).join('\n\n') : null
     ```
+
   - **关联文件**: `src/routes/openaiRoutes.js`: Line 268-272
 
 ## [1.1.186] - 2025-10-30
@@ -107,7 +198,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
       - axios 1.6.0 (不依赖内置 HTTP，完全兼容)
       - https-proxy-agent 7.0.2 (v7 支持 Node.js 18+)
       - socks-proxy-agent 8.0.2 (v8 支持 Node.js 18+)
-      - @aws-sdk/* 3.861.0+ (AWS SDK v3 完全支持)
+      - @aws-sdk/\* 3.861.0+ (AWS SDK v3 完全支持)
       - ldapjs 3.0.7 (v3 支持所有 LTS 版本)
     - ✅ 架构设计：async/await 现代化模式，完善的错误处理，标准 Stream 处理
   - **风险评估**: 极低风险（1/10），经过 78 个源文件、3万+ 行代码的完整分析
@@ -259,15 +350,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - 修复前逻辑:
   ```javascript
   if (systemMessage && systemMessage.includes('You are currently in Xcode')) {
-    claudeRequest.system = systemMessage  // 只保留 Xcode 消息
+    claudeRequest.system = systemMessage // 只保留 Xcode 消息
   } else {
-    claudeRequest.system = claudeCodeSystemMessage  // 强制替换
+    claudeRequest.system = claudeCodeSystemMessage // 强制替换
   }
   ```
 - 修复后逻辑:
   ```javascript
   if (systemMessage) {
-    claudeRequest.system = systemMessage  // 直接使用用户消息
+    claudeRequest.system = systemMessage // 直接使用用户消息
   }
   // 未提供则不设置
   ```

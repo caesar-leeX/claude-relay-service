@@ -255,6 +255,22 @@ const handleResponses = async (req, res) => {
       req.body.model = 'gpt-5' // 同时更新请求体中的模型
     }
 
+    // 检测是否需要流式到非流式的转换（针对 gpt-5/gpt-5-codex 模型）
+    let needsStreamToNonStreamConversion = false
+    const clientRequestedStream = req.body?.stream !== false // 客户端期望的流式状态
+
+    if (
+      (requestedModel === 'gpt-5' || requestedModel === 'gpt-5-codex') &&
+      !clientRequestedStream
+    ) {
+      // Codex API 要求 stream: true，但客户端请求 stream: false
+      needsStreamToNonStreamConversion = true
+      req.body.stream = true // 强制后端使用流式
+      logger.info(
+        `🔄 Enabling stream-to-non-stream conversion for ${requestedModel} (client requested non-stream)`
+      )
+    }
+
     const isStream = req.body?.stream !== false // 默认为流式（兼容现有行为）
 
     // 判断是否为 Codex CLI 的请求
@@ -557,14 +573,14 @@ const handleResponses = async (req, res) => {
 
     res.status(upstream.status)
 
-    if (isStream) {
-      // 流式响应头
+    if (isStream && !needsStreamToNonStreamConversion) {
+      // 真实流式响应头（直接转发SSE）
       res.setHeader('Content-Type', 'text/event-stream')
       res.setHeader('Cache-Control', 'no-cache')
       res.setHeader('Connection', 'keep-alive')
       res.setHeader('X-Accel-Buffering', 'no')
     } else {
-      // 非流式响应头
+      // 非流式响应头（包括需要转换的情况）
       res.setHeader('Content-Type', 'application/json')
     }
 
@@ -577,8 +593,8 @@ const handleResponses = async (req, res) => {
       }
     }
 
-    if (isStream) {
-      // 立即刷新响应头，开始 SSE
+    if (isStream && !needsStreamToNonStreamConversion) {
+      // 立即刷新响应头，开始 SSE（仅在真实流式时）
       if (typeof res.flushHeaders === 'function') {
         res.flushHeaders()
       }
@@ -704,16 +720,16 @@ const handleResponses = async (req, res) => {
       try {
         const chunkStr = chunk.toString()
 
-        // 转发数据给客户端
-        if (!res.destroyed) {
+        // 如果需要转换，只收集数据不转发；如果是真实流式，则立即转发
+        if (!needsStreamToNonStreamConversion && !res.destroyed) {
           res.write(chunk)
         }
 
-        // 同时解析数据以捕获 usage 信息
+        // 收集数据以捕获 usage 信息（转换模式需要完整buffer）
         buffer += chunkStr
 
-        // 处理完整的 SSE 事件
-        if (buffer.includes('\n\n')) {
+        // 仅在真实流式模式下处理事件（转换模式在end时统一处理）
+        if (!needsStreamToNonStreamConversion && buffer.includes('\n\n')) {
           const events = buffer.split('\n\n')
           buffer = events.pop() || '' // 保留最后一个可能不完整的事件
 
@@ -729,7 +745,135 @@ const handleResponses = async (req, res) => {
     })
 
     upstream.data.on('end', async () => {
-      // 处理剩余的 buffer
+      // 如果需要转换SSE到非流式JSON格式
+      if (needsStreamToNonStreamConversion) {
+        try {
+          logger.info('🔄 Converting SSE stream to non-stream JSON response')
+
+          // 解析完整的SSE buffer以提取内容和usage
+          parseSSEForUsage(buffer)
+
+          // 从SSE事件中提取文本内容
+          let fullContent = ''
+          const lines = buffer.split('\n')
+
+          for (const line of lines) {
+            if (line.startsWith('data: ')) {
+              try {
+                const jsonStr = line.slice(6)
+                const eventData = JSON.parse(jsonStr)
+
+                // 提取文本内容 (response.delta 或 response.content)
+                if (eventData.type === 'response.delta' && eventData.delta?.text) {
+                  fullContent += eventData.delta.text
+                } else if (eventData.type === 'response.completed' && eventData.response?.content) {
+                  // Codex API 的完整响应格式
+                  for (const contentItem of eventData.response.content) {
+                    if (contentItem.type === 'text' && contentItem.text) {
+                      fullContent += contentItem.text
+                    }
+                  }
+                }
+              } catch (e) {
+                // 忽略解析错误
+              }
+            }
+          }
+
+          // 构建标准OpenAI非流式JSON响应
+          const modelToRecord = actualModel || requestedModel || 'gpt-5'
+
+          // 将 Codex API usage 格式转换为标准 OpenAI 格式
+          let standardUsage = {
+            prompt_tokens: 0,
+            completion_tokens: 0,
+            total_tokens: 0
+          }
+
+          if (usageData) {
+            const inputTokens = usageData.input_tokens || usageData.prompt_tokens || 0
+            const outputTokens = usageData.output_tokens || usageData.completion_tokens || 0
+            standardUsage = {
+              prompt_tokens: inputTokens,
+              completion_tokens: outputTokens,
+              total_tokens: usageData.total_tokens || inputTokens + outputTokens
+            }
+          }
+
+          const nonStreamResponse = {
+            id: `chatcmpl-${Date.now()}`,
+            object: 'chat.completion',
+            created: Math.floor(Date.now() / 1000),
+            model: modelToRecord,
+            choices: [
+              {
+                index: 0,
+                message: {
+                  role: 'assistant',
+                  content: fullContent
+                },
+                finish_reason: 'stop'
+              }
+            ],
+            usage: standardUsage
+          }
+
+          logger.info(`✅ Converted stream to non-stream response (${fullContent.length} chars)`)
+
+          // 发送JSON响应
+          if (!res.headersSent) {
+            res.json(nonStreamResponse)
+          }
+
+          // 记录使用统计（与真实流式模式相同的逻辑）
+          if (usageData) {
+            try {
+              const totalInputTokens = usageData.input_tokens || 0
+              const outputTokens = usageData.output_tokens || 0
+              const cacheReadTokens = usageData.input_tokens_details?.cached_tokens || 0
+              const actualInputTokens = Math.max(0, totalInputTokens - cacheReadTokens)
+
+              await apiKeyService.recordUsage(
+                apiKeyData.id,
+                actualInputTokens,
+                outputTokens,
+                0,
+                cacheReadTokens,
+                modelToRecord,
+                accountId
+              )
+
+              logger.info(
+                `📊 Recorded OpenAI usage (converted) - Input: ${totalInputTokens}(actual:${actualInputTokens}+cached:${cacheReadTokens}), Output: ${outputTokens}, Model: ${modelToRecord}`
+              )
+
+              await applyRateLimitTracking(
+                req,
+                {
+                  inputTokens: actualInputTokens,
+                  outputTokens,
+                  cacheCreateTokens: 0,
+                  cacheReadTokens
+                },
+                modelToRecord,
+                'openai-stream-converted'
+              )
+            } catch (error) {
+              logger.error('Failed to record OpenAI usage (converted):', error)
+            }
+          }
+
+          return // 转换模式下直接返回，不继续执行后续代码
+        } catch (error) {
+          logger.error('Failed to convert SSE to non-stream:', error)
+          if (!res.headersSent) {
+            res.status(500).json({ error: { message: 'Failed to convert response' } })
+          }
+          return
+        }
+      }
+
+      // 处理剩余的 buffer (真实流式模式)
       if (buffer.trim()) {
         parseSSEForUsage(buffer)
       }
