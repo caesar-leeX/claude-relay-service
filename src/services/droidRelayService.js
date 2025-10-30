@@ -8,8 +8,9 @@ const redis = require('../models/redis')
 const { updateRateLimitCounters } = require('../utils/rateLimitHelper')
 const logger = require('../utils/logger')
 const runtimeAddon = require('../utils/runtimeAddon')
+const config = require('../../config/config')
+const promptLoader = require('./promptLoader')
 
-const SYSTEM_PROMPT = 'You are Droid, an AI software engineering agent built by Factory.'
 const RUNTIME_EVENT_FMT_PAYLOAD = 'fmtPayload'
 
 /**
@@ -26,7 +27,6 @@ class DroidRelayService {
     }
 
     this.userAgent = 'factory-cli/0.19.12'
-    this.systemPrompt = SYSTEM_PROMPT
     this.API_KEY_STICKY_PREFIX = 'droid_api_key'
   }
 
@@ -1004,33 +1004,51 @@ class DroidRelayService {
       processedBody.stream = true
     }
 
-    // Anthropic 端点：仅注入系统提示
+    // Anthropic 端点：根据配置注入系统提示
     if (endpointType === 'anthropic') {
-      if (this.systemPrompt) {
-        const promptBlock = { type: 'text', text: this.systemPrompt }
-        if (Array.isArray(processedBody.system)) {
-          const hasPrompt = processedBody.system.some(
-            (item) => item && item.type === 'text' && item.text === this.systemPrompt
-          )
-          if (!hasPrompt) {
-            processedBody.system = [promptBlock, ...processedBody.system]
+      if (config.prompts.droid.injectSystemPrompt) {
+        const droidPrompt = promptLoader.getPrompt('droid', 'default')
+
+        if (droidPrompt) {
+          const promptBlock = { type: 'text', text: droidPrompt }
+          if (Array.isArray(processedBody.system)) {
+            const hasPrompt = processedBody.system.some(
+              (item) => item && item.type === 'text' && item.text === droidPrompt
+            )
+            if (!hasPrompt) {
+              processedBody.system = [promptBlock, ...processedBody.system]
+            }
+          } else {
+            processedBody.system = [promptBlock]
           }
+          logger.debug(`📝 Injected Droid prompt (${droidPrompt.length} chars, from promptLoader)`)
         } else {
-          processedBody.system = [promptBlock]
+          logger.warn('⚠️  Droid default prompt not found in promptLoader, skipping injection')
         }
+      } else {
+        logger.debug('📝 Droid prompt injection disabled by config')
       }
     }
 
     // OpenAI 端点：仅前置系统提示
     if (endpointType === 'openai') {
-      if (this.systemPrompt) {
-        if (processedBody.instructions) {
-          if (!processedBody.instructions.startsWith(this.systemPrompt)) {
-            processedBody.instructions = `${this.systemPrompt}${processedBody.instructions}`
+      if (config.prompts.droid.injectSystemPrompt) {
+        const droidPrompt = promptLoader.getPrompt('droid', 'default')
+
+        if (droidPrompt) {
+          if (processedBody.instructions) {
+            if (!processedBody.instructions.startsWith(droidPrompt)) {
+              processedBody.instructions = `${droidPrompt}${processedBody.instructions}`
+            }
+          } else {
+            processedBody.instructions = droidPrompt
           }
+          logger.debug(`📝 Injected Droid prompt (${droidPrompt.length} chars, from promptLoader)`)
         } else {
-          processedBody.instructions = this.systemPrompt
+          logger.warn('⚠️  Droid default prompt not found in promptLoader, skipping injection')
         }
+      } else {
+        logger.debug('📝 Droid prompt injection disabled by config')
       }
     }
 

@@ -47,12 +47,43 @@ const config = {
     betaHeader:
       process.env.CLAUDE_BETA_HEADER ||
       'claude-code-20250219,oauth-2025-04-20,interleaved-thinking-2025-05-14,fine-grained-tool-streaming-2025-05-14',
+    // 自定义系统提示词（可选，为空则不添加）
+    systemPrompt: process.env.CLAUDE_SYSTEM_PROMPT || '',
     overloadHandling: {
       enabled: (() => {
         const minutes = parseInt(process.env.CLAUDE_OVERLOAD_HANDLING_MINUTES) || 0
         // 验证配置值：限制在0-1440分钟(24小时)内
         return Math.max(0, Math.min(minutes, 1440))
       })()
+    }
+  },
+
+  // 📝 Prompt管理配置
+  prompts: {
+    // Codex prompt配置
+    codex: {
+      // 是否使用默认prompt（false = 不注入，true = 注入）
+      useDefaultPrompt: process.env.CODEX_USE_DEFAULT_PROMPT !== 'false', // 默认true以保持向后兼容
+      // 默认场景（default, gpt-5-codex, review）
+      defaultScenario: process.env.CODEX_DEFAULT_SCENARIO || 'default'
+    },
+
+    // OpenAI to Claude 转换 prompt配置
+    openaiToClaude: {
+      // 是否使用默认Claude Code prompt
+      useDefaultPrompt: process.env.OPENAI_TO_CLAUDE_USE_DEFAULT_PROMPT !== 'false' // 默认true以保持向后兼容
+    },
+
+    // Droid prompt配置
+    droid: {
+      // 是否注入Droid system prompt
+      injectSystemPrompt: process.env.DROID_INJECT_SYSTEM_PROMPT !== 'false' // 默认true以保持向后兼容
+    },
+
+    // Claude Code prompt配置（用于claudeRelayService）
+    claudeCode: {
+      // 是否注入Claude Code prompt（仅针对非真实Claude Code请求）
+      injectPrompt: process.env.CLAUDE_CODE_INJECT_PROMPT !== 'false' // 默认true以保持向后兼容
     }
   },
 

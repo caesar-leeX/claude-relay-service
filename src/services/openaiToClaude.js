@@ -4,6 +4,8 @@
  */
 
 const logger = require('../utils/logger')
+const config = require('../../config/config')
+const promptLoader = require('./promptLoader')
 
 class OpenAIToClaudeConverter {
   constructor() {
@@ -31,19 +33,29 @@ class OpenAIToClaudeConverter {
       stream: openaiRequest.stream || false
     }
 
-    // 定义 Claude Code 的默认系统提示词
-    const claudeCodeSystemMessage = "You are Claude Code, Anthropic's official CLI for Claude."
     // 如果 OpenAI 请求中包含系统消息,提取并使用
     const systemMessage = this._extractSystemMessage(openaiRequest.messages)
     if (systemMessage) {
-      // 使用用户提供的系统提示词
+      // P1: 使用用户提供的系统提示词
       claudeRequest.system = systemMessage
       logger.debug(`📋 Using custom system prompt (${systemMessage.length} chars)`)
       logger.debug(`📋 System prompt preview: ${systemMessage.substring(0, 150)}...`)
+    } else if (config.prompts.openaiToClaude.useDefaultPrompt) {
+      // P2: 使用配置的默认 Claude Code prompt（从 promptLoader 加载）
+      const defaultPrompt = promptLoader.getPrompt('claudeCode', 'default')
+
+      if (defaultPrompt) {
+        claudeRequest.system = defaultPrompt
+        logger.debug(
+          `📋 Using Claude Code default prompt (${defaultPrompt.length} chars, from promptLoader)`
+        )
+      } else {
+        // 如果 promptLoader 返回 null，记录警告但不注入
+        logger.warn('⚠️  Claude Code default prompt not found in promptLoader, skipping injection')
+      }
     } else {
-      // 使用 Claude Code 默认系统提示词
-      claudeRequest.system = claudeCodeSystemMessage
-      logger.debug('📋 Using Claude Code default system prompt')
+      // P3: 配置禁用默认 prompt，不注入任何内容
+      logger.debug('📋 Claude Code default prompt disabled by config, no injection')
     }
 
     // 处理停止序列
