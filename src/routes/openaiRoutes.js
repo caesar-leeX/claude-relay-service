@@ -257,7 +257,7 @@ const handleResponses = async (req, res) => {
 
     // 检测是否需要流式到非流式的转换（针对 gpt-5/gpt-5-codex 模型）
     let needsStreamToNonStreamConversion = false
-    const clientRequestedStream = req.body?.stream !== false // 客户端期望的流式状态
+    const clientRequestedStream = req.body?.stream === true // 客户端期望的流式状态（默认非流式）
 
     if (
       (requestedModel === 'gpt-5' || requestedModel === 'gpt-5-codex') &&
@@ -271,7 +271,7 @@ const handleResponses = async (req, res) => {
       )
     }
 
-    const isStream = req.body?.stream !== false // 默认为流式（兼容现有行为）
+    const isStream = req.body?.stream === true // 默认为非流式（与其他路由保持一致）
 
     // 判断是否为 Codex CLI 的请求
     const isCodexCLI = req.body?.instructions?.startsWith(
@@ -763,34 +763,17 @@ const handleResponses = async (req, res) => {
                 const jsonStr = line.slice(6)
                 const eventData = JSON.parse(jsonStr)
 
-                // 调试：打印 response.completed 事件的结构
-                if (eventData.type === 'response.completed') {
-                  logger.info('🔍 DEBUG response.completed event structure:', {
-                    hasResponse: !!eventData.response,
-                    hasOutput: !!eventData.response?.output,
-                    hasContent: !!eventData.response?.content,
-                    responseKeys: eventData.response ? Object.keys(eventData.response) : [],
-                    sampleData: JSON.stringify(eventData).substring(0, 500)
-                  })
-                }
-
                 // 提取文本内容
                 if (eventData.type === 'response.output_text.delta' && eventData.delta) {
                   // 增量文本事件 (delta 是直接字符串)
-                  fullContent += typeof eventData.delta === 'string' ? eventData.delta : (eventData.delta.text || '')
+                  fullContent +=
+                    typeof eventData.delta === 'string'
+                      ? eventData.delta
+                      : eventData.delta.text || ''
                 } else if (eventData.type === 'response.completed' && eventData.response) {
-                  // 完成事件 - 尝试多种提取路径
-                  if (eventData.response.text) {
-                    // 路径1: response.text (DEBUG 日志显示存在此字段)
-                    logger.info('🔍 DEBUG response.text structure:', {
-                      textType: typeof eventData.response.text,
-                      textValue: JSON.stringify(eventData.response.text),
-                      isArray: Array.isArray(eventData.response.text),
-                      textKeys: typeof eventData.response.text === 'object' ? Object.keys(eventData.response.text) : null
-                    })
-                    fullContent += eventData.response.text
-                  } else if (eventData.response.output && Array.isArray(eventData.response.output)) {
-                    // 路径2: response.output[] (旧逻辑)
+                  // 完成事件 - 从 response.output[] 提取内容
+                  if (eventData.response.output && Array.isArray(eventData.response.output)) {
+                    // 路径1: response.output[] (Codex API 标准格式)
                     for (const outputItem of eventData.response.output) {
                       if (outputItem.type === 'message' && outputItem.message?.content) {
                         for (const contentItem of outputItem.message.content) {
@@ -800,8 +783,11 @@ const handleResponses = async (req, res) => {
                         }
                       }
                     }
-                  } else if (eventData.response.choices && eventData.response.choices[0]?.message?.content) {
-                    // 路径3: response.choices[0].message.content (标准OpenAI格式)
+                  } else if (
+                    eventData.response.choices &&
+                    eventData.response.choices[0]?.message?.content
+                  ) {
+                    // 路径2: response.choices[0].message.content (标准OpenAI格式回退)
                     fullContent += eventData.response.choices[0].message.content
                   }
                 }
