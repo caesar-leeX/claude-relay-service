@@ -1,3 +1,8 @@
+/**
+ * Claude Relay Service - Main Application
+ * 多平台 AI API 中转服务，支持 Claude、Gemini、OpenAI 等多种账户类型
+ */
+
 const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
