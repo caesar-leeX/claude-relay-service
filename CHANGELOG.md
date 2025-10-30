@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.195] - 2025-10-30
+
+### Fixed
+
+- **[OpenAI Responses] 修复 gpt-5 模型非流式请求返回空内容的问题**
+  - **问题**: v1.1.192 中实现的流式到非流式转换功能解析了错误的 SSE 响应格式，导致提取的文本内容为空（0 字符）
+  - **根本原因**: 代码假设响应格式为 `response.content[]`，但实际 Codex API 使用 `response.output[].message.content[]` 格式
+  - **修复内容**: 更新 SSE 解析逻辑以匹配实际的 Codex API 响应格式
+  - **代码变更** (`src/routes/openaiRoutes.js:769-780`):
+    - 修改前: 遍历 `eventData.response.content[]` 并查找 `type === 'text'`
+    - 修改后: 遍历 `eventData.response.output[]` → 提取 `outputItem.message.content[]` → 查找 `type === 'output_text'`
+  - **防御性编程**: 使用可选链 (`?.`) 和类型检查保护所有访问路径，解析失败不会导致服务崩溃
+  - **向后兼容**: 保留 `response.delta.text` 增量更新解析逻辑，支持多种响应格式
+  - **影响范围**: 修复 n8n AI Agent 使用 gpt-5 非流式模式时返回空内容的问题
+  - **测试验证**: 修改后需验证非流式请求返回正常内容且流式请求不受影响
+  - **关联版本**: 修复 v1.1.192 中引入的 SSE 转换功能
+
 ## [1.1.194] - 2025-10-30
 
 ### Fixed

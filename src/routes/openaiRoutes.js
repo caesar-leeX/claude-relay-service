@@ -763,14 +763,18 @@ const handleResponses = async (req, res) => {
                 const jsonStr = line.slice(6)
                 const eventData = JSON.parse(jsonStr)
 
-                // 提取文本内容 (response.delta 或 response.content)
+                // 提取文本内容 (response.delta 或 response.output)
                 if (eventData.type === 'response.delta' && eventData.delta?.text) {
                   fullContent += eventData.delta.text
-                } else if (eventData.type === 'response.completed' && eventData.response?.content) {
-                  // Codex API 的完整响应格式
-                  for (const contentItem of eventData.response.content) {
-                    if (contentItem.type === 'text' && contentItem.text) {
-                      fullContent += contentItem.text
+                } else if (eventData.type === 'response.completed' && eventData.response?.output) {
+                  // Codex API 的实际完整响应格式
+                  for (const outputItem of eventData.response.output) {
+                    if (outputItem.type === 'message' && outputItem.message?.content) {
+                      for (const contentItem of outputItem.message.content) {
+                        if (contentItem.type === 'output_text' && contentItem.text) {
+                          fullContent += contentItem.text
+                        }
+                      }
                     }
                   }
                 }
