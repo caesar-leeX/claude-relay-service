@@ -1,3 +1,7 @@
+/**
+ * OpenAI Routes - v1.1.199
+ * Handles OpenAI API requests including gpt-5 (Codex/Responses format)
+ */
 const express = require('express')
 const axios = require('axios')
 const router = express.Router()
