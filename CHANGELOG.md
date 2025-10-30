@@ -5,6 +5,108 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.199] - 2025-10-30
+
+### Fixed
+
+- **[OpenAI Routes] 修改 stream 默认行为为非流式，修复 Postman 请求 400 错误**
+  - **问题**: Postman 等客户端未指定 `stream` 参数时，默认行为为流式（`stream !== false`），导致返回 400 错误 "Connection closed"
+  - **根本原因**: openaiRoutes.js 的默认行为与其他路由（api.js、unified.js、azureOpenaiRoutes.js）不一致
+  - **用户反馈**: "不对,流式不应该自动判断么.我觉得这里不够智能" - 用户期望更智能的默认行为
+  - **修复内容**:
+    - 修改 `clientRequestedStream` 和 `isStream` 判断逻辑（Line 260, 274）
+    - 从 `req.body?.stream !== false` 改为 `req.body?.stream === true`
+    - 现在未指定 `stream` 参数时，默认使用非流式响应
+  - **移除错误代码**:
+    - 移除 v1.1.198 的所有 DEBUG 日志代码
+    - 移除 v1.1.197 引入的错误 `response.text` 提取路径
+    - `response.text` 实际上是配置对象 `{format: {type: "text"}, verbosity: "medium"}`，不是响应内容
+  - **响应内容提取优化** (Line 766-793):
+    - 优先从 `response.output[]` 数组提取内容（Codex API 标准格式）
+    - 保留 `response.choices[]` 作为标准 OpenAI 格式回退
+    - 保留 `response.output_text.delta` 增量更新解析
+  - **向后兼容性影响**: ⚠️ **Breaking Change**
+    - 修改前: 未指定 `stream` → 默认流式响应
+    - 修改后: 未指定 `stream` → 默认非流式响应
+    - 如需流式响应，必须明确指定 `stream: true`
+    - 与其他路由（api.js、unified.js、azureOpenaiRoutes.js）保持一致
+  - **影响范围**:
+    - 仅影响 `/openai/*` 路由（gpt-5 等 OpenAI Responses/Codex 模型）
+    - 不影响 Claude、Gemini、Droid、Azure OpenAI 等其他服务路由
+  - **测试场景修复**:
+    - ✅ Postman 请求（无 `stream` 字段）→ 正常返回 JSON 响应
+    - ✅ n8n 请求（`stream: false`）→ 正常返回 JSON 响应
+    - ✅ 流式请求（`stream: true`）→ 正常返回 SSE 流
+  - **关联版本**: 修复 v1.1.197 引入的 response.text bug，完善 v1.1.195 的内容提取逻辑
+  - **Commit**: b3b26861
+
+### Changed
+
+- **[Version] 更新版本号到 v1.1.199**
+  - 包含 v1.1.196-v1.1.198 的所有调试发现和修复
+
+## [1.1.198] - 2025-10-30
+
+### Added
+
+- **[Debug] 添加 response.text 结构调试日志**
+  - **目的**: 诊断 v1.1.197 中 `response.text` 路径提取的内容问题
+  - **发现**: `response.text` 是配置对象 `{format: {type: "text"}, verbosity: "medium"}`，不是响应文本内容
+  - **调试日志内容**:
+    - `textType`: typeof 检查
+    - `textValue`: JSON.stringify 完整值
+    - `isArray`: 数组类型检查
+    - `textKeys`: 对象键列表
+  - **结果**: 确认 `response.text` 路径错误，需要在 v1.1.199 中移除
+  - **代码位置**: `src/routes/openaiRoutes.js` Line 782-789
+  - **Commit**: 40c0ca89
+
+### Changed
+
+- **[Version] 更新版本号到 v1.1.198**
+  - 临时调试版本，用于诊断 response.text 结构
+
+## [1.1.197] - 2025-10-30
+
+### Fixed
+
+- **[OpenAI Responses] 修复 gpt-5 非流式响应内容提取逻辑**
+  - **问题**: v1.1.196 调试发现增量事件类型不正确
+  - **修复内容**:
+    - 增量事件类型从 `response.delta` 改为 `response.output_text.delta`
+    - 添加多路径内容提取回退机制
+  - **代码变更** (`src/routes/openaiRoutes.js`):
+    - 路径1: `response.text` - 基于 DEBUG 日志发现的字段（⚠️ 后续发现此路径错误）
+    - 路径2: `response.output[]` - Codex API 标准格式
+    - 路径3: `response.choices[]` - 标准 OpenAI 格式回退
+  - **⚠️ 引入的问题**: 错误添加了 `response.text` 提取路径
+    - `response.text` 实际上是配置对象，不是内容
+    - 导致非流式响应中拼接了 `[object Object]` 字符串
+    - 在 v1.1.198 中添加 DEBUG 日志诊断
+    - 在 v1.1.199 中移除此错误路径
+  - **Commit**: a62588d9
+
+### Changed
+
+- **[Version] 更新版本号到 v1.1.197**
+  - 基于 v1.1.196 的调试发现进行修复
+
+## [1.1.196] - 2025-10-30
+
+### Added
+
+- **[Debug] 添加 SSE 响应格式调试日志**
+  - **目的**: 诊断 v1.1.195 修复后仍然返回空内容的问题
+  - **调试内容**: 记录 SSE 事件的完整结构，用于分析正确的解析路径
+  - **发现**: 增量更新事件类型为 `response.output_text.delta`，而非 `response.delta`
+  - **结果**: 为 v1.1.197 的修复提供了关键信息
+  - **Commit**: 56c6c7bf
+
+### Changed
+
+- **[Version] 更新版本号到 v1.1.196**
+  - 临时调试版本，用于诊断 SSE 事件类型
+
 ## [1.1.195] - 2025-10-30
 
 ### Fixed
