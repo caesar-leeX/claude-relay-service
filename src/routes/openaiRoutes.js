@@ -763,6 +763,17 @@ const handleResponses = async (req, res) => {
                 const jsonStr = line.slice(6)
                 const eventData = JSON.parse(jsonStr)
 
+                // 调试：打印 response.completed 事件的结构
+                if (eventData.type === 'response.completed') {
+                  logger.info('🔍 DEBUG response.completed event structure:', {
+                    hasResponse: !!eventData.response,
+                    hasOutput: !!eventData.response?.output,
+                    hasContent: !!eventData.response?.content,
+                    responseKeys: eventData.response ? Object.keys(eventData.response) : [],
+                    sampleData: JSON.stringify(eventData).substring(0, 500)
+                  })
+                }
+
                 // 提取文本内容 (response.delta 或 response.output)
                 if (eventData.type === 'response.delta' && eventData.delta?.text) {
                   fullContent += eventData.delta.text
