@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.194] - 2025-10-30
+
+### Fixed
+
+- **[Cost] 修复总费用被重置的 bug** (来自上游 v1.1.191)
+  - **问题**: API Key 的总费用（`usage:cost:total:{keyId}`）在成本初始化时被错误地重置
+  - **原因**: `costInitService` 会从最近 30 天的日费用统计中计算总费用并覆盖原有值。由于日费用键过期时间为 30 天，超过 30 天的历史费用数据会丢失，导致总费用被低估
+  - **修复内容**:
+    - **智能初始化逻辑**: 只在总费用不存在或为 0 时才初始化，避免覆盖现有累计值
+    - **数据完整性保护**: 如果总费用已存在，保持不变，防止因日费用键过期导致的数据丢失
+    - **不一致性检测**: 添加警告机制，当计算值比现有值大 10% 以上时记录警告日志
+    - **详细日志**: 添加初始化、跳过、数据不匹配等情况的详细日志，便于调试
+  - **代码变更**:
+    - `src/models/redis.js`: 添加注释明确说明 `totalKey` 永不过期，持续累加
+    - `src/services/costInitService.js`:
+      - 先检查总费用是否已存在：`const existingTotal = await client.get(totalKey)`
+      - 只在不存在或为 0 时初始化：`if (!existingTotal || parseFloat(existingTotal) === 0)`
+      - 添加数据不一致警告：10% 阈值检测
+      - 添加详细日志：初始化成功、跳过初始化、数据不匹配警告
+  - **影响范围**: 对于长期运行的服务（超过 30 天），可防止历史费用数据丢失，确保费用统计准确性
+  - **注意事项**: 如需强制重新计算总费用，需先手动删除 Redis 中的 `usage:cost:total:{keyId}` 键
+  - **作者**: shaw <shaw-wei@foxmail.com>
+  - **提交**: a2b04eea
+
+### Changed
+
+- **[Version] 更新版本号到 v1.1.194**
+  - 合并上游 v1.1.191 总费用重置修复
+  - 保留 v1.1.192 的所有本地功能（gpt-5 非流式转换、并发控制等）
+
 ## [1.1.192] - 2025-10-30
 
 ### Added
