@@ -774,19 +774,29 @@ const handleResponses = async (req, res) => {
                   })
                 }
 
-                // 提取文本内容 (response.delta 或 response.output)
-                if (eventData.type === 'response.delta' && eventData.delta?.text) {
-                  fullContent += eventData.delta.text
-                } else if (eventData.type === 'response.completed' && eventData.response?.output) {
-                  // Codex API 的实际完整响应格式
-                  for (const outputItem of eventData.response.output) {
-                    if (outputItem.type === 'message' && outputItem.message?.content) {
-                      for (const contentItem of outputItem.message.content) {
-                        if (contentItem.type === 'output_text' && contentItem.text) {
-                          fullContent += contentItem.text
+                // 提取文本内容
+                if (eventData.type === 'response.output_text.delta' && eventData.delta) {
+                  // 增量文本事件 (delta 是直接字符串)
+                  fullContent += typeof eventData.delta === 'string' ? eventData.delta : (eventData.delta.text || '')
+                } else if (eventData.type === 'response.completed' && eventData.response) {
+                  // 完成事件 - 尝试多种提取路径
+                  if (eventData.response.text) {
+                    // 路径1: response.text (DEBUG 日志显示存在此字段)
+                    fullContent += eventData.response.text
+                  } else if (eventData.response.output && Array.isArray(eventData.response.output)) {
+                    // 路径2: response.output[] (旧逻辑)
+                    for (const outputItem of eventData.response.output) {
+                      if (outputItem.type === 'message' && outputItem.message?.content) {
+                        for (const contentItem of outputItem.message.content) {
+                          if (contentItem.type === 'output_text' && contentItem.text) {
+                            fullContent += contentItem.text
+                          }
                         }
                       }
                     }
+                  } else if (eventData.response.choices && eventData.response.choices[0]?.message?.content) {
+                    // 路径3: response.choices[0].message.content (标准OpenAI格式)
+                    fullContent += eventData.response.choices[0].message.content
                   }
                 }
               } catch (e) {
