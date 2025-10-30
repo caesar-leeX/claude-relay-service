@@ -11,25 +11,9 @@
 
 **🔐 自行搭建Claude API中转服务，支持多账户管理**
 
-[English](README_EN.md) • [快速开始](https://pincc.ai/) • [演示站点](https://demo.pincc.ai/admin-next/login) • [公告频道](https://t.me/claude_relay_service)
+[English](README_EN.md) • [快速开始](https://pincc.ai/) 
 
 </div>
-
----
-
-## 💎 Claude/Codex 拼车服务推荐
-
-<div align="center">
-
-| 平台 | 类型 | 服务 | 介绍 |
-|:---|:---|:---|:---|
-| **[pincc.ai](https://pincc.ai/)** | 🏆 **官方运营** | <small>✅ Claude Code<br>✅ Codex CLI</small> | 项目直营，提供稳定的 Claude Code / Codex CLI 拼车服务 |
-| **[ctok.ai](https://ctok.ai/)** | 🤝 合作伙伴 | <small>✅ Claude Code<br>✅ Codex CLI</small> | 社区认证，提供 Claude Code / Codex CLI 拼车 |
-
-
-</div>
-
----
 
 ## ⚠️ 重要提醒
 
