@@ -442,6 +442,7 @@ class UnifiedOpenAIScheduler {
         (account.isActive === true || account.isActive === 'true') &&
         account.status !== 'error' &&
         account.status !== 'rateLimited' &&
+        account.status !== 'unauthorized' &&
         (account.accountType === 'shared' || !account.accountType)
       ) {
         const hasRateLimitFlag = this._hasRateLimitFlag(account.rateLimitStatus)
