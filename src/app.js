@@ -1,5 +1,5 @@
 /**
- * Claude Relay Service - v2.0.1
+ * Claude Relay Service - v2.0.2
  * Multi-platform AI API relay service with unified Prompt Management System
  */
 const express = require('express')
