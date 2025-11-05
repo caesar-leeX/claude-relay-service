@@ -179,6 +179,22 @@ const config = {
   development: {
     debug: process.env.DEBUG === 'true',
     hotReload: process.env.HOT_RELOAD === 'true'
+  },
+
+  // 💬 Prompt 管理配置（v2.0.0 新增）
+  prompts: {
+    // Codex (OpenAI Responses) prompt 配置
+    codex: {
+      enabled: process.env.CODEX_PROMPT_ENABLED !== 'false' // 默认启用
+    },
+    // Claude Code prompt 配置
+    claudeCode: {
+      enabled: process.env.CLAUDE_CODE_PROMPT_ENABLED !== 'false' // 默认启用
+    },
+    // Droid (Factory.ai) prompt 配置
+    droid: {
+      enabled: process.env.DROID_PROMPT_ENABLED !== 'false' // 默认启用
+    }
   }
 }
 

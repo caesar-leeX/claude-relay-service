@@ -8,8 +8,9 @@ const redis = require('../models/redis')
 const { updateRateLimitCounters } = require('../utils/rateLimitHelper')
 const logger = require('../utils/logger')
 const runtimeAddon = require('../utils/runtimeAddon')
+const config = require('../../config/config')
+const promptLoader = require('./promptLoader')
 
-const SYSTEM_PROMPT = 'You are Droid, an AI software engineering agent built by Factory.'
 const RUNTIME_EVENT_FMT_PAYLOAD = 'fmtPayload'
 
 /**
@@ -26,7 +27,6 @@ class DroidRelayService {
     }
 
     this.userAgent = 'factory-cli/0.19.12'
-    this.systemPrompt = SYSTEM_PROMPT
     this.API_KEY_STICKY_PREFIX = 'droid_api_key'
   }
 
@@ -1004,33 +1004,49 @@ class DroidRelayService {
       processedBody.stream = true
     }
 
-    // Anthropic 端点：仅注入系统提示
+    // Droid Prompt 前置注入（P2/P3 优先级，无 P1）
+    // P2: 配置启用时前置注入，P3: 配置禁用时不注入
+    const droidPrompt = config.prompts.droid.enabled ? promptLoader.getPrompt('droid') : null
+
+    // Anthropic 端点：前置注入到 system 数组
     if (endpointType === 'anthropic') {
-      if (this.systemPrompt) {
-        const promptBlock = { type: 'text', text: this.systemPrompt }
+      if (droidPrompt) {
+        const promptBlock = { type: 'text', text: droidPrompt }
         if (Array.isArray(processedBody.system)) {
           const hasPrompt = processedBody.system.some(
-            (item) => item && item.type === 'text' && item.text === this.systemPrompt
+            (item) => item && item.type === 'text' && item.text === droidPrompt
           )
           if (!hasPrompt) {
             processedBody.system = [promptBlock, ...processedBody.system]
+            logger.debug(`💬 前置注入 Droid prompt 到 Anthropic 端点 (${droidPrompt.length} chars)`)
           }
         } else {
           processedBody.system = [promptBlock]
+          logger.debug(`💬 前置注入 Droid prompt 到 Anthropic 端点 (${droidPrompt.length} chars)`)
         }
+      } else if (config.prompts.droid.enabled) {
+        logger.warn('⚠️ Droid prompt 加载失败，继续无前置注入')
+      } else {
+        logger.debug('🔇 Droid prompt 已禁用，不注入')
       }
     }
 
-    // OpenAI 端点：仅前置系统提示
+    // OpenAI 端点：前置注入到 instructions
     if (endpointType === 'openai') {
-      if (this.systemPrompt) {
+      if (droidPrompt) {
         if (processedBody.instructions) {
-          if (!processedBody.instructions.startsWith(this.systemPrompt)) {
-            processedBody.instructions = `${this.systemPrompt}${processedBody.instructions}`
+          if (!processedBody.instructions.startsWith(droidPrompt)) {
+            processedBody.instructions = `${droidPrompt}${processedBody.instructions}`
+            logger.debug(`💬 前置注入 Droid prompt 到 OpenAI 端点 (${droidPrompt.length} chars)`)
           }
         } else {
-          processedBody.instructions = this.systemPrompt
+          processedBody.instructions = droidPrompt
+          logger.debug(`💬 前置注入 Droid prompt 到 OpenAI 端点 (${droidPrompt.length} chars)`)
         }
+      } else if (config.prompts.droid.enabled) {
+        logger.warn('⚠️ Droid prompt 加载失败，继续无前置注入')
+      } else {
+        logger.debug('🔇 Droid prompt 已禁用，不注入')
       }
     }
 

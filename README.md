@@ -6,8 +6,8 @@
 [![Node.js](https://img.shields.io/badge/Node.js-18+-green.svg)](https://nodejs.org/)
 [![Redis](https://img.shields.io/badge/Redis-6+-red.svg)](https://redis.io/)
 [![Docker](https://img.shields.io/badge/Docker-Ready-blue.svg)](https://www.docker.com/)
-[![Docker Build](https://github.com/Wei-Shaw/claude-relay-service/actions/workflows/auto-release-pipeline.yml/badge.svg)](https://github.com/Wei-Shaw/claude-relay-service/actions/workflows/auto-release-pipeline.yml)
-[![Docker Pulls](https://img.shields.io/docker/pulls/weishaw/claude-relay-service)](https://hub.docker.com/r/weishaw/claude-relay-service)
+[![Docker Build](https://github.com/caesarleex/claude-relay-service/actions/workflows/auto-release-pipeline.yml/badge.svg)](https://github.com/caesarleex/claude-relay-service/actions/workflows/auto-release-pipeline.yml)
+[![Docker Pulls](https://img.shields.io/docker/pulls/caesarleex/claude-relay-service)](https://hub.docker.com/r/caesarleex/claude-relay-service)
 
 **🔐 自行搭建Claude API中转服务，支持多账户管理**
 
@@ -15,21 +15,6 @@
 
 </div>
 
----
-
-## 💎 Claude/Codex 拼车服务推荐
-
-<div align="center">
-
-| 平台 | 类型 | 服务 | 介绍 |
-|:---|:---|:---|:---|
-| **[pincc.ai](https://pincc.ai/)** | 🏆 **官方运营** | <small>✅ Claude Code<br>✅ Codex CLI</small> | 项目直营，提供稳定的 Claude Code / Codex CLI 拼车服务 |
-| **[ctok.ai](https://ctok.ai/)** | 🤝 合作伙伴 | <small>✅ Claude Code<br>✅ Codex CLI</small> | 社区认证，提供 Claude Code / Codex CLI 拼车 |
-
-
-</div>
-
----
 
 ## ⚠️ 重要提醒
 
@@ -91,33 +76,6 @@
 - 📊 **监控面板**: Web界面查看所有数据
 - 🛡️ **安全控制**: 访问限制、速率控制、客户端限制
 - 🌐 **代理支持**: 支持HTTP/SOCKS5代理
-
----
-
-## 📋 部署要求
-
-### 硬件要求（最低配置）
-
-- **CPU**: 1核心就够了
-- **内存**: 512MB（建议1GB）
-- **硬盘**: 30GB可用空间
-- **网络**: 能访问到Anthropic API（建议使用US地区的机器）
-- **建议**: 2核4G的基本够了，网络尽量选回国线路快一点的（为了提高速度，建议不要开代理或者设置服务器的IP直连）
-- **经验**: 阿里云、腾讯云的海外主机经测试会被Cloudflare拦截，无法直接访问claude api
-
-### 软件要求
-
-- **Node.js** 18或更高版本
-- **Redis** 6或更高版本
-- **操作系统**: 建议Linux
-
-### 费用估算
-
-- **服务器**: 轻量云服务器，一个月30-60块
-- **Claude订阅**: 看你怎么分摊了
-- **其他**: 域名（可选）
-
----
 
 ## 🚀 脚本部署（推荐）
 
@@ -211,7 +169,7 @@ sudo systemctl start redis
 
 ```bash
 # 下载项目
-git clone https://github.com/Wei-Shaw//claude-relay-service.git
+git clone https://github.com/caesarleex/claude-relay-service.git
 cd claude-relay-service
 
 # 安装依赖

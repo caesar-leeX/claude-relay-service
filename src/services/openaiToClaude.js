@@ -4,6 +4,8 @@
  */
 
 const logger = require('../utils/logger')
+const config = require('../../config/config')
+const promptLoader = require('./promptLoader')
 
 class OpenAIToClaudeConverter {
   constructor() {
@@ -31,24 +33,25 @@ class OpenAIToClaudeConverter {
       stream: openaiRequest.stream || false
     }
 
-    // 定义 Claude Code 的默认系统提示词
-    const claudeCodeSystemMessage = "You are Claude Code, Anthropic's official CLI for Claude."
-
-    // 如果 OpenAI 请求中包含系统消息,提取并检查
+    // 三级优先级：Claude Code System Prompt
     const systemMessage = this._extractSystemMessage(openaiRequest.messages)
-    if (systemMessage && systemMessage.includes('You are currently in Xcode')) {
-      // Xcode 系统提示词
+
+    if (systemMessage && systemMessage.trim()) {
+      // P1（最高）：用户自定义 system message（包括 Xcode 等所有格式）
       claudeRequest.system = systemMessage
-      logger.info(
-        `🔍 Xcode request detected, using Xcode system prompt (${systemMessage.length} chars)`
-      )
-      logger.debug(`📋 System prompt preview: ${systemMessage.substring(0, 150)}...`)
+      logger.debug(`📋 使用用户自定义 system message (${systemMessage.length} chars)`)
+    } else if (config.prompts.claudeCode.enabled) {
+      // P2（默认）：使用配置的默认 prompt
+      const defaultPrompt = promptLoader.getPrompt('claudeCode')
+      if (defaultPrompt) {
+        claudeRequest.system = defaultPrompt
+        logger.info(`💬 应用 Claude Code 默认 prompt (${defaultPrompt.length} chars)`)
+      } else {
+        logger.warn('⚠️ Claude Code prompt 加载失败，继续无 system')
+      }
     } else {
-      // 使用 Claude Code 默认系统提示词
-      claudeRequest.system = claudeCodeSystemMessage
-      logger.debug(
-        `📋 Using Claude Code default system prompt${systemMessage ? ' (ignored custom prompt)' : ''}`
-      )
+      // P3（最低）：配置禁用 - 无注入
+      logger.debug('🔇 Claude Code prompt 已禁用，不注入 system')
     }
 
     // 处理停止序列

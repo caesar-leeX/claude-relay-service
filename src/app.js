@@ -56,6 +56,11 @@ class Application {
       logger.info('🔄 Initializing pricing service...')
       await pricingService.initialize()
 
+      // 💬 初始化 Prompt Loader 服务
+      logger.info('🔄 Initializing prompt loader...')
+      const promptLoader = require('./services/promptLoader')
+      await promptLoader.initialize()
+
       // 📋 初始化模型服务
       logger.info('🔄 Initializing model service...')
       const modelService = require('./services/modelService')
