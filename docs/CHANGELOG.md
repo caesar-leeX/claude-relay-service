@@ -11,6 +11,67 @@
 
 ---
 
+## [2.0.4] - 2025-01-05
+
+### Fixed
+
+#### Prompts 管理系统修复（Critical）
+
+- **修复 Docker 部署环境 Prompts 显示为空的问题**
+  - 问题原因: API 响应缺少 `success: true` 字段，导致前端条件判断失败
+  - 受影响范围: Docker/K8s 部署环境，所有 prompts 均无法显示
+  - 修复位置: `src/routes/admin.js` - `GET /admin/prompts/:service` 端点
+  - 影响: 生产环境中所有 Prompts 管理功能恢复正常
+
+- **修复环境变量配置规则不可见的问题**
+  - 问题原因: 前端硬编码环境变量名称，违反 DRY 原则
+  - 新增 API: `GET /admin/prompts/meta/config` - 提供配置元数据
+  - 配置来源: `config/config.js` prompts 配置（Single Source of Truth）
+  - 显示信息: 环境变量名称、描述、当前启用状态
+
+### Changed
+
+#### UI/UX 改进
+
+- **Prompts 管理移至系统设置子栏**
+  - 变更前: Prompts 作为根栏独立显示（与仪表板、API Keys 等同级）
+  - 变更后: Prompts 作为"系统设置"的子栏（与品牌设置、通知设置并列）
+  - 向后兼容: `/prompts` 路由自动重定向至 `/settings`
+  - 影响范围:
+    - `TabBar.vue` - 移除根栏 Prompts 导航项
+    - `MainLayout.vue` - 移除 Prompts 路由映射
+    - `SettingsView.vue` - 新增 Prompts 子栏导航和嵌入式视图
+    - `router/index.js` - 添加 `/prompts` → `/settings` 重定向
+
+- **PromptsView 组件支持嵌入式模式**
+  - 新增 `embedded` prop - 控制是否显示页面标题和外层卡片
+  - 配置动态加载 - 从 API 获取环境变量配置，零硬编码
+  - 环境变量配置卡片 - 显示 `envVar`、`description`、当前启用状态
+
+#### 后端改进
+
+- **config/config.js 扩展**
+  - 新增字段:
+    - `prompts.*.envVar` - 环境变量名称（如 `CODEX_PROMPT_ENABLED`）
+    - `prompts.*.description` - 环境变量描述（用户可见说明）
+  - 单一数据源: 所有配置从 config.js 读取，前端通过 API 获取
+
+- **API 响应格式统一**
+  - `GET /admin/prompts/:service` 响应格式:
+    - 新增 `success: true` - 与其他 API 端点格式一致
+    - 新增 `lastModified` - 文件最后修改时间（ISO 8601 格式）
+  - `GET /admin/prompts/meta/config` 新端点:
+    - 返回所有服务的配置元数据（envVar, description, enabled）
+    - 格式: `{success: true, data: [{id, envVar, envDescription, enabled}]}`
+
+### Technical Debt
+
+- **消除硬编码**: 环境变量名称从前端移除，改为从后端配置读取
+- **组件复用**: PromptsView 通过 `embedded` prop 复用，避免代码重复
+- **API 一致性**: 统一响应格式 `{success: true, data: xxx}`，符合项目规范
+
+---
+
 ## [2.0.0] - 2025-01-05
 
 ### Added
@@ -131,7 +192,7 @@
 
 #### 文档完善
 
-- `docs/v2.0.0-prompt-management-plan-clean.md` - 完整升级计划
+- `docs/prompt-management/prompt-management-plan.md` - 完整升级计划
 - `docs/prompt-management/` - 技术文档目录（7个文档）
   - 01-architecture.md - 架构设计
   - 02-implementation-guide.md - 实施指南

@@ -1,8 +1,8 @@
 <template>
   <div class="prompts-container">
-    <div class="card p-4 sm:p-6">
-      <!-- 页面标题 -->
-      <div class="mb-4 sm:mb-6">
+    <div :class="embedded ? '' : 'card p-4 sm:p-6'">
+      <!-- 页面标题（embedded 模式下隐藏） -->
+      <div v-if="!embedded" class="mb-4 sm:mb-6">
         <h3 class="mb-1 text-lg font-bold text-gray-900 dark:text-gray-100 sm:mb-2 sm:text-xl">
           System Prompts 管理
         </h3>
@@ -50,6 +50,46 @@
                 >
                   {{ prompts[service.id].length }} 字符
                 </span>
+              </div>
+            </div>
+          </div>
+
+          <!-- 环境变量配置说明卡片 -->
+          <div
+            v-if="serviceConfigs[service.id]"
+            class="mb-4 rounded-lg bg-blue-50 p-3 dark:bg-blue-900/20"
+          >
+            <div class="flex items-start">
+              <i class="fas fa-info-circle mr-2 mt-0.5 text-blue-600 dark:text-blue-400"></i>
+              <div class="flex-1">
+                <div class="text-sm font-medium text-blue-900 dark:text-blue-200">
+                  环境变量配置
+                </div>
+                <div class="mt-1 text-xs text-blue-700 dark:text-blue-300">
+                  <code class="rounded bg-blue-100 px-1.5 py-0.5 dark:bg-blue-800">
+                    {{ serviceConfigs[service.id].envVar || 'N/A' }}
+                  </code>
+                  <span class="ml-2">{{ serviceConfigs[service.id].envDescription || '' }}</span>
+                </div>
+                <div class="mt-2 flex items-center text-xs">
+                  <span class="font-medium text-blue-900 dark:text-blue-200">当前状态:</span>
+                  <span
+                    :class="[
+                      'ml-2 inline-flex items-center rounded-full px-2 py-0.5 font-medium',
+                      metadata[service.id]?.enabled
+                        ? 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200'
+                        : 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300'
+                    ]"
+                  >
+                    <i
+                      :class="[
+                        'mr-1 text-xs',
+                        metadata[service.id]?.enabled ? 'fas fa-check-circle' : 'fas fa-times-circle'
+                      ]"
+                    ></i>
+                    {{ metadata[service.id]?.enabled ? '已启用' : '已禁用' }}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
@@ -204,9 +244,15 @@ import { showToast } from '@/utils/toast'
 
 export default {
   name: 'PromptsView',
+  props: {
+    embedded: {
+      type: Boolean,
+      default: false
+    }
+  },
   setup() {
-    // 服务定义
-    const services = [
+    // 服务定义（简化，只保留静态信息）
+    const services = ref([
       {
         id: 'codex',
         name: 'Codex CLI',
@@ -225,7 +271,7 @@ export default {
         description: 'Droid (Factory.ai) 服务的默认提示词',
         icon: 'fas fa-wrench'
       }
-    ]
+    ])
 
     // 编辑模式定义
     const editModes = [
@@ -242,6 +288,7 @@ export default {
       droid: ''
     })
     const metadata = reactive({})
+    const serviceConfigs = ref({}) // 新增：存储从API获取的配置
     const saving = reactive({})
     const uploading = reactive({})
     const importing = reactive({})
@@ -261,11 +308,30 @@ export default {
       droid: null
     })
 
+    // 加载配置元数据
+    const loadConfigs = async () => {
+      try {
+        const response = await apiClient.get('/admin/prompts/meta/config')
+        if (response.success) {
+          const configs = {}
+          response.data.forEach((config) => {
+            configs[config.id] = config
+          })
+          serviceConfigs.value = configs
+        }
+      } catch (error) {
+        console.error('Failed to load configs:', error)
+      }
+    }
+
     // 加载所有 Prompts
     const loadPrompts = async () => {
       loading.value = true
       try {
-        for (const service of services) {
+        // 先加载配置元数据
+        await loadConfigs()
+
+        for (const service of services.value) {
           const response = await apiClient.get(`/admin/prompts/${service.id}`)
           if (response.success) {
             prompts[service.id] = response.content || ''
@@ -454,6 +520,7 @@ export default {
       loading,
       prompts,
       metadata,
+      serviceConfigs,
       saving,
       uploading,
       importing,

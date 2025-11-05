@@ -9246,6 +9246,31 @@ function downloadFromUrl(url, timeout = 30000) {
 }
 
 /**
+ * GET /admin/prompts/meta/config - 获取 Prompts 配置元数据
+ */
+router.get('/prompts/meta/config', authenticateAdmin, (req, res) => {
+  try {
+    const validServices = promptLoader.getValidServices()
+
+    // 从 config 读取配置，零硬编码
+    const serviceConfigs = validServices.map((serviceId) => ({
+      id: serviceId,
+      envVar: config.prompts[serviceId]?.envVar,
+      envDescription: config.prompts[serviceId]?.description,
+      enabled: config.prompts[serviceId]?.enabled ?? true
+    }))
+
+    res.json({
+      success: true,
+      data: serviceConfigs
+    })
+  } catch (error) {
+    logger.error('Failed to get prompts config metadata:', error)
+    res.status(500).json({ error: 'Failed to get config metadata' })
+  }
+})
+
+/**
  * GET /admin/prompts/:service - 获取 prompt 内容
  */
 router.get('/prompts/:service', authenticateAdmin, (req, res) => {
@@ -9262,11 +9287,18 @@ router.get('/prompts/:service', authenticateAdmin, (req, res) => {
       return res.status(404).json({ error: 'Prompt not found or not loaded' })
     }
 
+    // 获取文件修改时间
+    const filePath = promptLoader.getFilePath(service)
+    const fs = require('fs')
+    const stats = fs.statSync(filePath)
+
     res.json({
+      success: true,
       service,
       content,
       length: content.length,
-      enabled: config.prompts[service].enabled
+      enabled: config.prompts[service].enabled,
+      lastModified: stats.mtime.toISOString()
     })
   } catch (error) {
     logger.error('Failed to get prompt:', error)

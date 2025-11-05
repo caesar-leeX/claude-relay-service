@@ -71,7 +71,6 @@ const tabs = computed(() => {
 
   baseTabs.push(
     { key: 'tutorial', name: '使用教程', shortName: '教程', icon: 'fas fa-graduation-cap' },
-    { key: 'prompts', name: 'Prompts 管理', shortName: 'Prompts', icon: 'fas fa-comment-dots' },
     { key: 'settings', name: '系统设置', shortName: '设置', icon: 'fas fa-cogs' }
   )
 
