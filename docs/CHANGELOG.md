@@ -11,6 +11,44 @@
 
 ---
 
+## [2.0.7] - 2025-11-06
+
+### Fixed
+
+#### Prompts 管理页面模板嵌套错误修复（Critical）
+
+- **修复 Prompts 管理页面完全无法显示的问题**
+  - 问题原因: prompts section 被错误地放置在"添加/编辑平台模态框"内部（SettingsView.vue Line 1222）
+  - 根本原因: 模板嵌套错误，prompts div 只在 `showAddPlatformModal === true` 时渲染
+  - 受影响范围: 所有环境，用户点击"系统设置 > Prompts 管理"时页面显示空白
+  - 诊断过程:
+    - Playwright 自动化测试确认 PromptsView 组件未挂载
+    - 浏览器 DOM 检查发现只有 2 个子 div（branding, webhook），缺少 prompts div
+    - 构建产物分析发现 prompts 代码在 webhook modal 代码之后
+    - 源码分析确认 prompts section 在模态框内部（Line 1222），而非 v-else 内部
+  - 修复位置:
+    - `web/admin-spa/src/views/SettingsView.vue` Line 645 - 将 prompts section 移动到正确位置
+    - 从模态框内部移动到 webhook section 之后、v-else 结束之前
+    - 使其与 branding/webhook section 并列（同级）
+  - 影响: Prompts 管理页面现在能正常显示和交互
+
+### Changed
+
+#### 代码质量改进
+
+- **PromptsView.vue 调试代码清理**
+  - 移除红色边框 `style="border: 2px solid red"`
+  - 移除黄色 DEBUG banner
+  - 移除 `console.log` 调试语句
+  - 修复 ESLint 警告：移除未使用的 props 参数
+
+- **构建产物优化**
+  - 前端重新构建（7.43秒）
+  - SettingsView bundle 大小: 66.38 kB（gzip: 16.05 kB）
+  - 无编译错误和警告
+
+---
+
 ## [2.0.6] - 2025-01-05
 
 ### Fixed

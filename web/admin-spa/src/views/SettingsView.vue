@@ -641,6 +641,11 @@
             </button>
           </div>
         </div>
+
+        <!-- Prompts 管理部分 -->
+        <div v-show="activeSection === 'prompts'">
+          <PromptsView :embedded="true" />
+        </div>
       </div>
     </div>
   </div>
@@ -1216,11 +1221,6 @@
               {{ savingPlatform ? '保存中...' : editingPlatform ? '保存修改' : '添加平台' }}
             </button>
           </div>
-        </div>
-
-        <!-- Prompts 管理部分 -->
-        <div v-show="activeSection === 'prompts'">
-          <PromptsView :embedded="true" />
         </div>
       </div>
     </div>
