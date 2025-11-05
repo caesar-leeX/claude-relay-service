@@ -9266,7 +9266,7 @@ router.get('/prompts/meta/config', authenticateAdmin, (req, res) => {
     })
   } catch (error) {
     logger.error('Failed to get prompts config metadata:', error)
-    res.status(500).json({ error: 'Failed to get config metadata' })
+    res.status(500).json({ error: 'Failed to get config metadata', message: error.message })
   }
 })
 
@@ -9289,7 +9289,6 @@ router.get('/prompts/:service', authenticateAdmin, (req, res) => {
 
     // 获取文件修改时间
     const filePath = promptLoader.getFilePath(service)
-    const fs = require('fs')
     const stats = fs.statSync(filePath)
 
     res.json({
@@ -9297,12 +9296,12 @@ router.get('/prompts/:service', authenticateAdmin, (req, res) => {
       service,
       content,
       length: content.length,
-      enabled: config.prompts[service].enabled,
+      enabled: config.prompts[service]?.enabled ?? true,
       lastModified: stats.mtime.toISOString()
     })
   } catch (error) {
     logger.error('Failed to get prompt:', error)
-    res.status(500).json({ error: 'Failed to get prompt' })
+    res.status(500).json({ error: 'Failed to get prompt', message: error.message })
   }
 })
 
