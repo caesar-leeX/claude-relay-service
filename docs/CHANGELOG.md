@@ -11,6 +11,39 @@
 
 ---
 
+## [2.0.8] - 2025-11-06
+
+### Fixed
+
+#### Claude Code Native API P1 优先级实现不一致修复（Critical）
+
+- **修复 claudeRelayService.js 未正确实现三级优先级系统的问题**
+  - 问题原因: v2.0.0 提交（5bc4211）声称"三级优先级系统应用于所有服务"，但 claudeRelayService.js 实际上强制混合用户和默认 prompt，而非实现 P1 优先级
+  - 根本原因: 代码逻辑错误，Line 549 强制执行 `[claudeCodePrompt, userSystemPrompt]` 而非 P1 优先级
+  - 受影响范围: Claude Code Native API 路由（`/api/v1/messages`, `/claude/v1/messages`）
+  - 影响版本: v2.0.0 至 v2.0.7
+  - 计划文档: [prompt-management-plan.md](./prompt-management/prompt-management-plan.md) 明确要求所有服务统一实现 P1>P2>P3 优先级
+  - 对比分析:
+    - ✅ openaiToClaude.js (Line 36-55): 正确实现 P1 优先级
+    - ✅ openaiRoutes.js (Line 277-292): 正确实现 P1 优先级
+    - ❌ claudeRelayService.js (Line 538-549): **错误实现**（强制混合）
+  - 修复位置:
+    - `src/services/claudeRelayService.js` Line 522-558 - 重写三级优先级逻辑
+    - 实现与 openaiToClaude.js 完全一致的 P1 优先级系统
+  - 修复后行为:
+    - **P1（最高）**: 用户有 system → 保持用户的，不注入任何默认 prompt
+    - **P2（默认）**: 用户无 system + 配置启用 → 注入默认 prompt
+    - **P3（最低）**: 配置禁用 → 不注入任何 prompt
+  - 技术细节:
+    - 新增 `hasUserSystem` 检查：支持字符串和数组格式
+    - P1 分支：空操作，保持 `processedBody.system` 原样
+    - 日志清晰化：`📋 使用用户自定义 system (P1 优先级)`
+  - 破坏性: 无（修复 bug，实现计划文档承诺的行为）
+  - 兼容性: 完全兼容（符合用户期望和文档声明）
+  - 相关文档: [06-behavior-analysis.md](./prompt-management/06-behavior-analysis.md#Claude-Code-服务)
+
+---
+
 ## [2.0.7] - 2025-11-06
 
 ### Fixed

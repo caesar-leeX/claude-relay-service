@@ -519,61 +519,40 @@ class ClaudeRelayService {
     // 判断是否是真实的 Claude Code 请求
     const isRealClaudeCode = this.isRealClaudeCodeRequest(processedBody)
 
-    // 如果不是真实的 Claude Code 请求，需要设置 Claude Code 系统提示词
+    // 如果不是真实的 Claude Code 请求，应用三级优先级系统
     if (!isRealClaudeCode) {
-      // 从 promptLoader 获取 Claude Code prompt (P2/P3 优先级)
+      // 从 promptLoader 获取 Claude Code prompt
       const claudeCodePromptText = config.prompts.claudeCode.enabled
         ? promptLoader.getPrompt('claudeCode')
         : null
 
-      if (claudeCodePromptText) {
-        const claudeCodePrompt = {
-          type: 'text',
-          text: claudeCodePromptText,
-          cache_control: {
-            type: 'ephemeral'
-          }
-        }
+      // 检查用户是否已有自定义 system
+      const hasUserSystem =
+        processedBody.system &&
+        ((typeof processedBody.system === 'string' && processedBody.system.trim()) ||
+          (Array.isArray(processedBody.system) && processedBody.system.length > 0))
 
-        if (processedBody.system) {
-          if (typeof processedBody.system === 'string') {
-            // 字符串格式：转换为数组，Claude Code 提示词在第一位
-            const userSystemPrompt = {
-              type: 'text',
-              text: processedBody.system
+      if (hasUserSystem) {
+        // P1（最高）：用户自定义 system - 保持原样，不注入
+        logger.debug(`📋 使用用户自定义 system (P1 优先级)`)
+        // 什么都不做，保持 processedBody.system 原样
+      } else if (claudeCodePromptText) {
+        // P2（默认）：使用配置的默认 prompt
+        processedBody.system = [
+          {
+            type: 'text',
+            text: claudeCodePromptText,
+            cache_control: {
+              type: 'ephemeral'
             }
-            // 如果用户的提示词与 Claude Code 提示词相同，只保留一个
-            if (processedBody.system.trim() === claudeCodePromptText) {
-              processedBody.system = [claudeCodePrompt]
-            } else {
-              processedBody.system = [claudeCodePrompt, userSystemPrompt]
-            }
-          } else if (Array.isArray(processedBody.system)) {
-            // 检查第一个元素是否是 Claude Code 系统提示词
-            const firstItem = processedBody.system[0]
-            const isFirstItemClaudeCode =
-              firstItem && firstItem.type === 'text' && firstItem.text === claudeCodePromptText
-
-            if (!isFirstItemClaudeCode) {
-              // 如果第一个不是 Claude Code 提示词，需要在开头插入
-              // 同时检查数组中是否有其他位置包含 Claude Code 提示词，如果有则移除
-              const filteredSystem = processedBody.system.filter(
-                (item) => !(item && item.type === 'text' && item.text === claudeCodePromptText)
-              )
-              processedBody.system = [claudeCodePrompt, ...filteredSystem]
-            }
-          } else {
-            // 其他格式，记录警告但不抛出错误，尝试处理
-            logger.warn('⚠️ Unexpected system field type:', typeof processedBody.system)
-            processedBody.system = [claudeCodePrompt]
           }
-        } else {
-          // 用户没有传递 system，需要添加 Claude Code 提示词
-          processedBody.system = [claudeCodePrompt]
-        }
+        ]
+        logger.info(`💬 应用 Claude Code 默认 prompt (${claudeCodePromptText.length} chars)`)
       } else if (config.prompts.claudeCode.enabled) {
+        // P3（最低）：配置启用但加载失败
         logger.warn('⚠️ Claude Code prompt 加载失败，跳过注入')
       } else {
+        // P3（最低）：配置禁用 - 无注入
         logger.debug('🔇 Claude Code prompt 已被配置禁用')
       }
     }
