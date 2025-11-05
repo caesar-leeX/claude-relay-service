@@ -31,7 +31,7 @@
               <div
                 class="mr-3 flex h-10 w-10 items-center justify-center rounded-lg bg-gradient-to-br from-blue-500 to-blue-600 text-white"
               >
-                <i :class="service.icon" class="text-lg"></i>
+                <i class="text-lg" :class="service.icon"></i>
               </div>
               <div>
                 <h3 class="text-lg font-semibold text-gray-900 dark:text-gray-100">
@@ -68,7 +68,7 @@
                 ]"
                 @click="currentMode[service.id] = mode.id"
               >
-                <i :class="mode.icon" class="mr-2"></i>
+                <i class="mr-2" :class="mode.icon"></i>
                 {{ mode.name }}
               </button>
             </nav>
@@ -78,9 +78,9 @@
           <div v-show="currentMode[service.id] === 'manual'">
             <textarea
               v-model="prompts[service.id]"
-              :rows="service.id === 'codex' ? 25 : 3"
               class="form-input w-full font-mono text-sm dark:border-gray-600 dark:bg-gray-700 dark:text-gray-200"
               :placeholder="`输入 ${service.name} 的 system prompt...`"
+              :rows="service.id === 'codex' ? 25 : 3"
             />
             <div class="mt-3 flex items-center justify-between">
               <div class="text-xs text-gray-500 dark:text-gray-400">
@@ -119,7 +119,7 @@
               <button
                 class="btn btn-success mx-auto block px-6 py-3"
                 :disabled="uploading[service.id]"
-                @click="triggerFileUpload(service.id)"
+                @click="triggerFileUpload()"
               >
                 <div v-if="uploading[service.id]" class="loading-spinner mr-2"></div>
                 <i v-else class="fas fa-upload mr-2"></i>
@@ -307,7 +307,7 @@ export default {
     }
 
     // 触发文件上传
-    const triggerFileUpload = (serviceId) => {
+    const triggerFileUpload = () => {
       const input = document.querySelector(`input[type="file"][accept=".txt"]`)
       if (input) {
         // 清空之前的选择
