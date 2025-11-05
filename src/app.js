@@ -1,3 +1,7 @@
+/**
+ * Claude Relay Service - v2.0.1
+ * Multi-platform AI API relay service with unified Prompt Management System
+ */
 const express = require('express')
 const cors = require('cors')
 const helmet = require('helmet')
