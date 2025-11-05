@@ -185,15 +185,21 @@ const config = {
   prompts: {
     // Codex (OpenAI Responses) prompt 配置
     codex: {
-      enabled: process.env.CODEX_PROMPT_ENABLED !== 'false' // 默认启用
+      enabled: process.env.CODEX_PROMPT_ENABLED !== 'false', // 默认启用
+      envVar: 'CODEX_PROMPT_ENABLED',
+      description: '设置为 false 禁用 Codex prompt 注入'
     },
     // Claude Code prompt 配置
     claudeCode: {
-      enabled: process.env.CLAUDE_CODE_PROMPT_ENABLED !== 'false' // 默认启用
+      enabled: process.env.CLAUDE_CODE_PROMPT_ENABLED !== 'false', // 默认启用
+      envVar: 'CLAUDE_CODE_PROMPT_ENABLED',
+      description: '设置为 false 禁用 Claude Code prompt 注入'
     },
     // Droid (Factory.ai) prompt 配置
     droid: {
-      enabled: process.env.DROID_PROMPT_ENABLED !== 'false' // 默认启用
+      enabled: process.env.DROID_PROMPT_ENABLED !== 'false', // 默认启用
+      envVar: 'DROID_PROMPT_ENABLED',
+      description: '设置为 false 禁用 Droid prompt 前置注入'
     }
   }
 }

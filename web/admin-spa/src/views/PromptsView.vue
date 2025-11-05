@@ -62,9 +62,7 @@
             <div class="flex items-start">
               <i class="fas fa-info-circle mr-2 mt-0.5 text-blue-600 dark:text-blue-400"></i>
               <div class="flex-1">
-                <div class="text-sm font-medium text-blue-900 dark:text-blue-200">
-                  环境变量配置
-                </div>
+                <div class="text-sm font-medium text-blue-900 dark:text-blue-200">环境变量配置</div>
                 <div class="mt-1 text-xs text-blue-700 dark:text-blue-300">
                   <code class="rounded bg-blue-100 px-1.5 py-0.5 dark:bg-blue-800">
                     {{ serviceConfigs[service.id].envVar || 'N/A' }}
@@ -84,7 +82,9 @@
                     <i
                       :class="[
                         'mr-1 text-xs',
-                        metadata[service.id]?.enabled ? 'fas fa-check-circle' : 'fas fa-times-circle'
+                        metadata[service.id]?.enabled
+                          ? 'fas fa-check-circle'
+                          : 'fas fa-times-circle'
                       ]"
                     ></i>
                     {{ metadata[service.id]?.enabled ? '已启用' : '已禁用' }}
@@ -318,9 +318,12 @@ export default {
             configs[config.id] = config
           })
           serviceConfigs.value = configs
+        } else {
+          showToast('加载配置元数据失败', 'error')
         }
       } catch (error) {
         console.error('Failed to load configs:', error)
+        showToast('加载配置元数据失败', 'error')
       }
     }
 

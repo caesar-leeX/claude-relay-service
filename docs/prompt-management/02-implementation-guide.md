@@ -1,6 +1,6 @@
 # Prompt 管理系统 - 实施指南
 
-> **相关文档**：[架构设计](./01-architecture.md) | [v2.0.0 升级计划](../v2.0.0-prompt-management-plan-clean.md)
+> **相关文档**：[架构设计](./01-architecture.md) | [v2.0.0 升级计划](./prompt-management-plan.md)
 
 ---
 

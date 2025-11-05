@@ -1,6 +1,6 @@
 # Prompt 管理系统 - 迁移指南
 
-> **相关文档**：[v2.0.0 升级计划](../v2.0.0-prompt-management-plan-clean.md) | [实施指南](./02-implementation-guide.md)
+> **相关文档**：[v2.0.0 升级计划](./prompt-management-plan.md) | [实施指南](./02-implementation-guide.md)
 
 ---
 
@@ -498,7 +498,7 @@ npm run service:stop && npm run service:start:daemon
 
 ## 📚 相关文档
 
-- [v2.0.0 升级计划](../v2.0.0-prompt-management-plan-clean.md)
+- [v2.0.0 升级计划](./prompt-management-plan.md)
 - [架构设计](./01-architecture.md)
 - [实施指南](./02-implementation-guide.md)
 - [测试计划](./04-testing-plan.md)

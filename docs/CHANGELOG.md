@@ -11,6 +11,37 @@
 
 ---
 
+## [2.0.5] - 2025-01-05
+
+### Fixed
+
+#### 配置和代码质量修复
+
+- **修复 config.example.js 配置不同步**
+  - 添加缺失的 `envVar` 和 `description` 字段
+  - 与 config.js 保持完全一致
+  - 影响: 新部署环境配置完整，API 返回正确数据
+
+- **修复 src/routes/admin.js 代码质量问题**
+  - 移除重复的 `require('fs')` 导入（已在文件顶部导入）
+  - 添加安全的配置访问 `config.prompts[service]?.enabled ?? true`
+  - 统一错误响应格式，添加 `message: error.message` 字段
+  - 影响: 代码更整洁，错误调试更容易
+
+- **修复 PromptsView.vue 错误处理不完善**
+  - `loadConfigs()` 函数添加用户错误提示
+  - 响应失败时显示 Toast 消息
+  - 网络错误时显示 Toast 消息
+  - 影响: 用户体验改善，错误可感知
+
+### Technical Debt
+
+- **代码一致性**: 错误响应格式与项目其他端点保持一致
+- **防御性编程**: 使用可选链和空值合并运算符防止意外错误
+- **用户体验**: 所有 API 调用失败都有明确的用户提示
+
+---
+
 ## [2.0.4] - 2025-01-05
 
 ### Fixed
