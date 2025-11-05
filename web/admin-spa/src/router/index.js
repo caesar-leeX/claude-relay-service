@@ -123,7 +123,7 @@ const routes = [
   },
   {
     path: '/prompts',
-    redirect: '/settings'
+    redirect: '/settings?section=prompts'
   },
   {
     path: '/user-management',

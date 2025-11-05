@@ -1229,6 +1229,7 @@
 
 <script setup>
 import { ref, onMounted, onBeforeUnmount, watch, computed } from 'vue'
+import { useRoute } from 'vue-router'
 import { storeToRefs } from 'pinia'
 import { showToast } from '@/utils/toast'
 import { useSettingsStore } from '@/stores/settings'
@@ -1249,6 +1250,15 @@ const iconFileInput = ref()
 
 // 当前激活的设置部分
 const activeSection = ref('branding')
+
+// 从路由参数读取初始子栏
+const route = useRoute()
+if (route.query.section) {
+  const validSections = ['branding', 'webhook', 'prompts']
+  if (validSections.includes(route.query.section)) {
+    activeSection.value = route.query.section
+  }
+}
 
 // 组件挂载状态
 const isMounted = ref(true)

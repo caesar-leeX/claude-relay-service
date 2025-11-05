@@ -11,6 +11,36 @@
 
 ---
 
+## [2.0.6] - 2025-01-05
+
+### Fixed
+
+#### Prompts 管理显示问题修复
+
+- **修复 Prompts 管理页面无法正常显示的问题**
+  - 问题原因: 路由重定向到 `/settings` 但未指定 section 参数，导致默认显示品牌设置栏
+  - 受影响范围: 从导航栏点击 Prompts 或访问 `/prompts` 路由时，PromptsView 组件被隐藏
+  - 修复位置:
+    - `router/index.js` - 重定向改为 `/settings?section=prompts`
+    - `SettingsView.vue` - 添加 `useRoute` 导入和路由参数读取逻辑
+  - 影响: Prompts 管理页面现在能正确显示
+
+### Changed
+
+#### 路由和组件改进
+
+- **SettingsView 支持 URL 查询参数初始化**
+  - 读取 `route.query.section` 参数
+  - 验证参数值在允许列表中（branding, webhook, prompts）
+  - 自动设置 `activeSection` 初始值
+  - 模式参考: `ApiStatsView.vue` 的路由参数处理方式
+
+- **Prompts 路由重定向优化**
+  - `/prompts` → `/settings?section=prompts`
+  - 确保用户访问时直接显示 Prompts 管理子栏
+
+---
+
 ## [2.0.5] - 2025-01-05
 
 ### Fixed
