@@ -11,9 +11,11 @@
 
 ---
 
-## [2.0.9] - 2025-11-07
+## [2.0.10] - 2025-11-07
 
 ### Fixed
+
+**注意：本版本为 v2.0.8 认证失败bug的真正修复版本。v2.0.9 为 CI 自动生成的错误版本（已删除），请直接使用 v2.0.10。**
 
 #### Claude Code Native API 认证失败修复（Critical）
 
@@ -66,9 +68,35 @@
     - [06-behavior-analysis.md](./prompt-management/06-behavior-analysis.md) - 行为分析
     - [prompt-management-plan.md](./prompt-management/prompt-management-plan.md) - 计划文档
 
+#### 工作流改进
+
+- **支持手动版本控制**
+  - 修改位置: `.github/workflows/auto-release-pipeline.yml` Line 106-142
+  - 新增逻辑: 当 VERSION 文件 > 最新 tag 时，使用手动指定的版本（不自动 +1）
+  - 保持原有自动版本递增功能（VERSION ≤ tag 时）
+  - 清晰的日志输出：区分 "🎯 Manual version control" 和 "🤖 Automatic version bump"
+
+#### 上游修复应用
+
+- **应用上游 v1.1.192 修复**
+  - 修复 2A: CanceledError 处理 (`src/routes/api.js` Line 1084-1094)
+    - 客户端断开连接使用 INFO 级别（不是 ERROR）
+    - 返回 499 状态码（Client Closed Request）
+  - 修复 2B: 扩展错误识别 (`src/services/claudeConsoleRelayService.js` Line 320-328)
+    - 新增 `CanceledError` 和 `ERR_CANCELED` 识别
+    - 统一客户端断开检测逻辑
+
+---
+
+## [2.0.9] - 2025-11-05
+
+**⚠️ 废弃版本：本版本为 CI 自动生成，仍包含 v2.0.8 的认证失败 bug。已删除 tag 和 release，请使用 v2.0.10。**
+
 ---
 
 ## [2.0.8] - 2025-11-06
+
+**⚠️ Bug 版本：本版本存在认证失败问题，已在 v2.0.10 修复。**
 
 ### Fixed
 
