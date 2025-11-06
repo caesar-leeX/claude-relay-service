@@ -200,7 +200,11 @@ jobs:
           echo "Creating new web-dist branch"
           git checkout --orphan web-dist
         fi
-        
+
+        # 配置 git
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+
         # 清空当前目录（保留 .git）
         git rm -rf . 2>/dev/null || true
         
