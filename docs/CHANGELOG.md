@@ -11,6 +11,63 @@
 
 ---
 
+## [2.0.9] - 2025-11-07
+
+### Fixed
+
+#### Claude Code Native API 认证失败修复（Critical）
+
+- **修复 v2.0.8 引入的 Anthropic 认证失败问题**
+  - 问题描述: v2.0.8 的 P1 优先级实现导致使用自定义 system message 时返回错误：`"This credential is only authorized for use with Claude Code"`
+  - 根本原因: v2.0.8 忽略了 **Anthropic Claude Code OAuth 凭据的认证约束（P0 级别）**
+  - 技术分析:
+    - Anthropic Claude Code OAuth 凭据要求请求必须包含 Claude Code system prompt
+    - v2.0.8 在用户有自定义 system 时不注入任何 prompt（P1 优先级）
+    - 导致发送: `system: ["You are a helpful assistant"]` → ❌ 缺少 Claude Code prompt → 认证失败
+  - 受影响版本: v2.0.8
+  - 受影响场景: 所有使用自定义 system message 的请求
+  - 修复位置: `src/services/claudeRelayService.js` Line 522-580
+  - 修复方案: **前置注入模式** - 回滚到 v2.0.7 的正确行为 + 重新定义优先级系统
+  - 新的优先级定义:
+    - **P0（技术约束 - 最高）**: Claude Code OAuth 凭据要求必须包含 Claude Code prompt（Anthropic API 认证要求）
+    - **P1（用户优先）**: 用户有 system → 前置注入 Claude Code prompt + 保留用户的
+      - 发送: `[claudeCodePrompt, ...userSystemPrompts]`
+      - 效果: ✅ 满足认证要求（P0） + ✅ 保留用户内容（P1）
+    - **P2（默认）**: 用户无 system → 仅注入 Claude Code prompt
+    - **P3（禁用）**: 配置禁用 → 不注入（⚠️ 可能导致认证失败）
+  - 修复后行为:
+    ```javascript
+    // 场景 1: 用户有自定义 system
+    请求: { system: "You are a helpful assistant" }
+    发送: { system: [
+      { type: 'text', text: 'You are Claude Code, Anthropic\'s official CLI for Claude.', cache_control: { type: 'ephemeral' } },
+      { type: 'text', text: 'You are a helpful assistant' }
+    ]}
+    结果: ✅ 认证通过
+
+    // 场景 2: 用户无 system
+    请求: { messages: [...] }
+    发送: { system: [{ type: 'text', text: 'You are Claude Code...', cache_control: { type: 'ephemeral' } }] }
+    结果: ✅ 认证通过
+    ```
+  - 关键证据:
+    - commit `dabf3bf` (2025-07-22): "解决了 'This credential is only authorized for use with Claude Code' 错误" - 通过 claudeCodeHeadersService 管理 headers
+    - v2.0.7 行为: 强制前置注入 `[claudeCodePrompt, userSystemPrompt]` - ✅ 认证通过
+    - v2.0.8 行为: 用户有 system 时不注入 - ❌ 认证失败
+  - 为什么 v2.0.8 的设计是错误的:
+    - ❌ 将两个不同场景混为一谈:
+      - `openaiToClaude.js` - 格式转换层，无 OAuth 认证约束
+      - `claudeRelayService.js` - OAuth 凭据层，有认证约束（P0）
+    - ❌ "纯粹的 P1 优先级"理论正确，但技术上不可行（违反 P0 约束）
+  - 破坏性: 无（修复 v2.0.8 的 bug，回到 v2.0.7 的正确行为）
+  - 兼容性: 完全兼容
+  - 相关 commit: `3ef616e` (v2.0.8 - 错误), `21bc252` (v2.0.7 - 正确), `dabf3bf` (headers 管理)
+  - 相关文档:
+    - [06-behavior-analysis.md](./prompt-management/06-behavior-analysis.md) - 行为分析
+    - [prompt-management-plan.md](./prompt-management/prompt-management-plan.md) - 计划文档
+
+---
+
 ## [2.0.8] - 2025-11-06
 
 ### Fixed

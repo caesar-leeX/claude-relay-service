@@ -519,41 +519,63 @@ class ClaudeRelayService {
     // 判断是否是真实的 Claude Code 请求
     const isRealClaudeCode = this.isRealClaudeCodeRequest(processedBody)
 
-    // 如果不是真实的 Claude Code 请求，应用三级优先级系统
+    // 如果不是真实的 Claude Code 请求，应用优先级系统
+    // P0（技术约束）：Claude Code OAuth 凭据要求必须包含 Claude Code prompt
+    // P1（用户优先）：保留用户自定义内容，通过前置注入方式满足 P0 约束
+    // P2（默认）：无用户自定义时使用默认 prompt
+    // P3（禁用）：配置禁用或加载失败
     if (!isRealClaudeCode) {
       // 从 promptLoader 获取 Claude Code prompt
       const claudeCodePromptText = config.prompts.claudeCode.enabled
         ? promptLoader.getPrompt('claudeCode')
         : null
 
-      // 检查用户是否已有自定义 system
-      const hasUserSystem =
-        processedBody.system &&
-        ((typeof processedBody.system === 'string' && processedBody.system.trim()) ||
-          (Array.isArray(processedBody.system) && processedBody.system.length > 0))
-
-      if (hasUserSystem) {
-        // P1（最高）：用户自定义 system - 保持原样，不注入
-        logger.debug(`📋 使用用户自定义 system (P1 优先级)`)
-        // 什么都不做，保持 processedBody.system 原样
-      } else if (claudeCodePromptText) {
-        // P2（默认）：使用配置的默认 prompt
-        processedBody.system = [
-          {
-            type: 'text',
-            text: claudeCodePromptText,
-            cache_control: {
-              type: 'ephemeral'
-            }
+      if (claudeCodePromptText) {
+        const claudeCodePrompt = {
+          type: 'text',
+          text: claudeCodePromptText,
+          cache_control: {
+            type: 'ephemeral'
           }
-        ]
-        logger.info(`💬 应用 Claude Code 默认 prompt (${claudeCodePromptText.length} chars)`)
+        }
+
+        // 检查用户是否已有自定义 system
+        const hasUserSystem =
+          processedBody.system &&
+          ((typeof processedBody.system === 'string' && processedBody.system.trim()) ||
+            (Array.isArray(processedBody.system) && processedBody.system.length > 0))
+
+        if (hasUserSystem) {
+          // P0+P1：前置注入 Claude Code prompt + 保留用户 system
+          // 原因：
+          // 1. Claude Code OAuth 凭据要求必须包含 Claude Code prompt（P0 技术约束）
+          // 2. 保留用户的 system message 确保其生效（P1 用户优先）
+          const userSystemPrompts = Array.isArray(processedBody.system)
+            ? processedBody.system
+            : [{ type: 'text', text: processedBody.system }]
+
+          // 过滤掉用户 system 中已存在的 Claude Code prompt（避免重复）
+          const filteredUserPrompts = userSystemPrompts.filter(
+            (item) => !(item?.type === 'text' && item?.text === claudeCodePromptText)
+          )
+
+          processedBody.system = [claudeCodePrompt, ...filteredUserPrompts]
+          logger.info(
+            `💬 应用 P0+P1 优先级: 前置注入 Claude Code prompt (${claudeCodePromptText.length} chars) + 保留用户 system (${filteredUserPrompts.length} 项)`
+          )
+        } else {
+          // P2（默认）：使用配置的默认 prompt
+          processedBody.system = [claudeCodePrompt]
+          logger.info(
+            `💬 应用 P2 优先级: Claude Code 默认 prompt (${claudeCodePromptText.length} chars)`
+          )
+        }
       } else if (config.prompts.claudeCode.enabled) {
-        // P3（最低）：配置启用但加载失败
-        logger.warn('⚠️ Claude Code prompt 加载失败，跳过注入')
+        // P3（加载失败）
+        logger.warn('⚠️ Claude Code prompt 加载失败，跳过注入（可能导致认证失败）')
       } else {
-        // P3（最低）：配置禁用 - 无注入
-        logger.debug('🔇 Claude Code prompt 已被配置禁用')
+        // P3（配置禁用）
+        logger.debug('🔇 Claude Code prompt 已被配置禁用（可能导致认证失败）')
       }
     }
 

@@ -108,18 +108,36 @@ jobs:
       id: next_version
       run: |
         VERSION="${{ steps.get_version.outputs.current_version }}"
-        
-        # 分割版本号
-        IFS='.' read -r -a version_parts <<< "$VERSION"
-        MAJOR="${version_parts[0]:-0}"
-        MINOR="${version_parts[1]:-0}"
-        PATCH="${version_parts[2]:-0}"
-        
-        # 默认递增patch版本
-        NEW_PATCH=$((PATCH + 1))
-        NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
-        
-        echo "New version: $NEW_VERSION"
+        FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+        LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "v0.0.0")
+        TAG_VERSION=${LATEST_TAG#v}
+
+        # 版本比较函数
+        function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
+
+        # 检查是否手动设置了目标版本（VERSION 文件 > 最新 tag）
+        if version_gt "$FILE_VERSION" "$TAG_VERSION"; then
+          # 手动版本控制：直接使用 VERSION 文件中的版本
+          NEW_VERSION="$FILE_VERSION"
+          echo "🎯 Manual version control detected"
+          echo "   Latest tag: $TAG_VERSION"
+          echo "   VERSION file: $FILE_VERSION"
+          echo "   Using manual version: $NEW_VERSION"
+        else
+          # 自动版本递增：原有逻辑
+          echo "🤖 Automatic version bump"
+          echo "   Current version: $VERSION"
+
+          IFS='.' read -r -a version_parts <<< "$VERSION"
+          MAJOR="${version_parts[0]:-0}"
+          MINOR="${version_parts[1]:-0}"
+          PATCH="${version_parts[2]:-0}"
+
+          NEW_PATCH=$((PATCH + 1))
+          NEW_VERSION="${MAJOR}.${MINOR}.${NEW_PATCH}"
+          echo "   Next version: $NEW_VERSION"
+        fi
+
         echo "new_version=$NEW_VERSION" >> $GITHUB_OUTPUT
         echo "new_tag=v$NEW_VERSION" >> $GITHUB_OUTPUT
 
