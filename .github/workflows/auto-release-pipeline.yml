@@ -144,15 +144,24 @@ jobs:
     - name: Update VERSION file
       if: steps.check.outputs.needs_bump == 'true'
       run: |
-        echo "${{ steps.next_version.outputs.new_version }}" > VERSION
-        
-        # 配置git
-        git config user.name "github-actions[bot]"
-        git config user.email "github-actions[bot]@users.noreply.github.com"
-        
-        # 提交VERSION文件 - 添加 [skip ci] 以避免再次触发
-        git add VERSION
-        git commit -m "chore: sync VERSION file with release ${{ steps.next_version.outputs.new_tag }} [skip ci]"
+        NEW_VERSION="${{ steps.next_version.outputs.new_version }}"
+        CURRENT_VERSION=$(cat VERSION | tr -d '[:space:]')
+
+        # 只有当版本不同时才更新和提交
+        if [ "$CURRENT_VERSION" != "$NEW_VERSION" ]; then
+          echo "Updating VERSION file: $CURRENT_VERSION -> $NEW_VERSION"
+          echo "$NEW_VERSION" > VERSION
+
+          # 配置git
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          # 提交VERSION文件 - 添加 [skip ci] 以避免再次触发
+          git add VERSION
+          git commit -m "chore: sync VERSION file with release ${{ steps.next_version.outputs.new_tag }} [skip ci]"
+        else
+          echo "VERSION file already up to date: $NEW_VERSION"
+        fi
 
     # 构建前端并推送到 web-dist 分支
     - name: Setup Node.js
