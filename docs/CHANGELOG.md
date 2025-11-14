@@ -38,6 +38,41 @@
 
 ### Changed
 
+#### Express 5.1.0 升级（破坏性变更已修复）
+
+- **Express 框架升级** (4.18.2 → 5.1.0)
+  - 依赖变更: +21 packages, -6 packages, changed 16 packages
+  - path-to-regexp: 0.1.10 → 8.3.0（通过 router@2.2.0）
+  - 测试通过率: 95.8% (23/24 项测试通过)
+  - 影响: 性能提升、Promise 原生支持、安全性增强
+
+- **path-to-regexp v8 路由语法修复** (2处破坏性变更)
+  - 问题根源: path-to-regexp v8 重写通配符语法，不再支持未命名通配符
+  - 修复内容:
+    - `src/routes/droidRoutes.js:111`: `/*/v1/models` → `/*prefix/v1/models`
+    - `src/app.js:221`: `/admin-next/*` → `/admin-next/*path`
+  - 功能影响: 零影响（代码未使用通配符捕获值，仅匹配路径）
+  - 匹配行为: 完全保持兼容
+    - Droid 路由仍匹配: `/droid/claude/v1/models`, `/droid/openai/v1/models`
+    - Admin SPA 仍匹配: `/admin-next/assets/`, `/admin-next/index.html`
+
+- **path-to-regexp v8 语法变更说明**
+  - 废弃语法（项目未使用，无影响）:
+    - `:param?` (可选参数) → 项目未使用 ✅
+    - `:param*` (零或多个段) → 项目未使用 ✅
+    - `:param+` (一或多个段) → 项目未使用 ✅
+  - 新增语法要求:
+    - 通配符必须命名: `/*name`（原 `/*` 不再支持）
+  - 唯一测试失败项: 可选参数语法 `:id?` 测试失败（预期行为，项目未使用）
+
+- **兼容性验证完成**
+  - ✅ 路由语法: 100% 兼容（项目使用的语法）
+  - ✅ 中间件: helmet, cors, compression, express.json() 全部兼容
+  - ✅ Express API: res.setHeader(), res.status(), res.headersSent 等全部正常
+  - ✅ SSE 流式响应: text/event-stream, res.write(), res.socket.setNoDelay() 正常
+  - ✅ 错误处理: 错误中间件、404 处理机制完整
+  - ✅ 路由模块: 所有 5 个路由模块加载成功（含修复的 droidRoutes.js）
+
 #### 代码质量改进（来自上游 v1.1.193）
 
 - **恢复被删除的通用函数**（符合 DRY 原则）

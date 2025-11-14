@@ -108,7 +108,7 @@ router.post(['/openai/v1/responses', '/openai/responses'], authenticateApiKey, a
 })
 
 // 模型列表端点（兼容性）
-router.get('/*/v1/models', authenticateApiKey, async (req, res) => {
+router.get('/*prefix/v1/models', authenticateApiKey, async (req, res) => {
   try {
     // 返回可用的模型列表
     const models = [

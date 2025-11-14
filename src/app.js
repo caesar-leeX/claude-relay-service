@@ -218,7 +218,7 @@ class Application {
         })
 
         // 处理所有其他 /admin-next/* 路径（但排除根路径）
-        this.app.get('/admin-next/*', (req, res) => {
+        this.app.get('/admin-next/*path', (req, res) => {
           // 如果是根路径，跳过（应该由上面的路由处理）
           if (req.path === '/admin-next/') {
             logger.error('❌ ERROR: /admin-next/ should not reach here!')
