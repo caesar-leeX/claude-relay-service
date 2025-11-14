@@ -11,6 +11,104 @@
 
 ---
 
+## [2.0.12] - 2025-11-15
+
+### Fixed
+
+#### 上游 v1.1.193 关键 Bug 修复合并（Critical）
+
+- **SSE 流式响应缓冲区修复** (7a6c287a)
+  - 问题描述: Gemini 流式响应在网络不稳定时因 TCP 数据包分割导致 SSE 解析失败
+  - 根本原因: 缺少对不完整 SSE 数据行的缓冲区处理
+  - 修复内容:
+    - 新增 `src/utils/sseParser.js` - 统一的 SSE 解析工具（52行）
+    - `src/routes/geminiRoutes.js` 导入 `parseSSELine` 函数
+    - `src/routes/standardGeminiRoutes.js` 添加 `streamBuffer` 逻辑处理 TCP 分包
+  - 影响: Gemini 流式响应在所有网络环境下稳定工作
+  - 技术细节: SSE 数据可能跨多个 TCP 包传输，需要缓冲区拼接完整行后再解析
+
+- **tokeninfo/userinfo 调用优化** (47d7a394)
+  - 问题描述: Gemini 企业账户每次请求都被误调用 tokeninfo/userinfo 接口
+  - 根本原因: 缺少账户类型判断，个人账户和企业账户混为一谈
+  - 修复内容:
+    - `src/services/geminiAccountService.js` 添加 `if (!projectId)` 判断
+    - 仅对个人账户（无 projectId）调用 tokeninfo/userinfo
+    - 错误日志级别优化为 warn（原 info）
+  - 影响: 企业账户性能提升，减少不必要的 API 调用和延迟
+
+### Changed
+
+#### 代码质量改进（来自上游 v1.1.193）
+
+- **恢复被删除的通用函数**（符合 DRY 原则）
+  - `forwardToCodeAssist` 函数 (91ad0658)
+    - 作用: 统一 Code Assist API 转发逻辑
+    - 位置: `src/services/geminiAccountService.js`
+    - 好处: 减少代码重复，提升可维护性
+  - `handleSimpleEndpoint` 函数 (df796a00)
+    - 作用: 简化端点处理逻辑
+    - 位置: `src/routes/geminiRoutes.js`
+
+- **恢复 tools/toolConfig 支持** (e1304058)
+  - 作用: 支持 Gemini API 官方的工具调用功能
+  - 位置: `src/routes/standardGeminiRoutes.js`
+  - 影响: 与 Gemini API 官方规范完全兼容
+
+- **移除 thought 字段过滤** (008c7a2b)
+  - 变更前: 中继服务自动过滤 `thought: true` 的响应部分
+  - 变更后: 完整转发 API 响应，让客户端（gemini-cli）自行处理
+  - 理由: 中继服务应该是透明的管道，不应该擅自修改 API 响应内容
+  - 影响: 用户设置 `include_thoughts: true` 时能正常获得推理过程
+  - 技术背景: Gemini 2.5 系列支持 thinking process（类似 OpenAI o1 的 reasoning）
+
+### Added
+
+#### 上游 v1.1.194 功能合并
+
+- **持久化安装路径功能** (5c021115)
+  - 新增 `persist_install_path` 函数（`scripts/manage.sh`）
+  - 将安装路径保存到 `~/.config/crs/install.conf`
+  - 便于 update/status 命令自动识别自定义安装目录
+  - 多层级路径查找逻辑:
+    1. 显式提供的 INSTALL_DIR/APP_DIR
+    2. 持久化配置文件（~/.config/crs/install.conf）
+    3. 基于脚本路径推导
+    4. 默认目录（/opt/claude-relay-service）
+  - 影响范围: 仅 Shell 脚本管理工具，不影响核心代码
+
+### Technical Details
+
+#### 合并策略说明
+
+- **冲突解决**:
+  - VERSION: 保留 2.0.12（当前分支版本策略）
+  - openaiRoutes.js: 保留当前分支的三级优先级系统
+    - 当前实现（promptLoader + P1/P2/P3）已覆盖上游 Codex 修复的场景
+    - 比上游的 `isCodexCLI` 判断 + 硬编码 prompt 更优
+
+- **兼容性验证**:
+  - ✅ 零破坏性：不影响 Prompt 管理系统（promptLoader）
+  - ✅ 零功能回退：所有 2.0.x 新功能保持不变
+  - ✅ 纯收益：获得关键 bug 修复和性能优化
+  - ✅ 代码隔离：Gemini 相关修复与 Prompt 系统无交集
+
+- **测试验证**:
+  - sseParser.js: 存在（52行）✓
+  - parseSSELine 使用: geminiRoutes.js（2处）、standardGeminiRoutes.js（2处）✓
+  - forwardToCodeAssist: 恢复（2处引用）✓
+  - projectId 判断: 已添加 ✓
+  - thought 过滤: 已移除 ✓
+  - persist_install_path: 已添加（2处）✓
+
+#### 合并来源
+
+- 上游仓库: https://github.com/Wei-Shaw/claude-relay-service.git
+- 合并版本: v1.1.193 (9个提交) + v1.1.194 (1个提交)
+- 共同祖先: v1.1.191 (ff1b982e)
+- 合并分支: merge/upstream-1.1.193-and-1.1.194
+
+---
+
 ## [2.0.10] - 2025-11-07
 
 ### Fixed
