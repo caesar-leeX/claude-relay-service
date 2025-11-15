@@ -11,6 +11,75 @@
 
 ---
 
+## [2.0.14] - 2025-11-15
+
+### Fixed
+
+#### 🚨 Critical: Express 5 启动崩溃修复（v2.0.13紧急修复）
+
+- **问题描述**
+  - v2.0.13 Docker镜像启动时立即崩溃
+  - 错误信息: `TypeError: Missing parameter name at index 1: *`
+  - 影响: 所有v2.0.13部署完全不可用
+
+- **根本原因**
+  - v2.0.12的path-to-regexp v8修复**不完整**，遗漏了2处关键路由
+  - Express 5.x使用path-to-regexp v8，完全禁止未命名通配符语法
+
+- **修复内容** (9e612dd4)
+  1. **src/app.js:376** - 404处理中间件
+
+     ```javascript
+     // ❌ 崩溃代码（v2.0.13）
+     app.use('*', (req, res) => { ... })
+
+     // ✅ 修复代码（v2.0.14）
+     app.use((req, res) => { ... })
+     ```
+
+     - 移除 `'*'` 参数，让中间件自然匹配所有未处理请求
+     - 功能完全等价，符合Express 5规范
+
+  2. **src/routes/droidRoutes.js:111** - Droid模型列表路由
+
+     ```javascript
+     // ❌ 错误语法（v2.0.12/v2.0.13）
+     router.get('/*prefix/v1/models', ...)
+
+     // ✅ 正确语法（v2.0.14）
+     router.get('/:prefix/v1/models', ...)
+     ```
+
+     - `/*prefix` 是path-to-regexp v8**无效语法**
+     - 正确用法: `/:prefix`（命名参数）或 `/*` + `/:name`（命名通配符）
+     - 匹配行为不变: `/claude/v1/models`, `/openai/v1/models` 等
+
+- **验证结果**
+  - ✅ 本地测试: App加载成功，无path-to-regexp错误
+  - ✅ CI/CD: 完整构建流程正常执行
+  - ✅ 功能回归: 404处理和Droid路由行为与v2.0.12完全一致
+
+- **技术说明**
+  - path-to-regexp v8语法变更详见: <https://git.new/pathToRegexpError>
+  - Express 5迁移指南: <https://expressjs.com/en/guide/migrating-5.html>
+
+---
+
+## [2.0.13] - 2025-11-15
+
+### Known Issues
+
+- 🚨 **Critical Bug**: 应用启动时崩溃（path-to-regexp v8兼容性问题）
+- **状态**: 已在v2.0.14修复
+- **建议**: 跳过此版本，直接使用v2.0.14
+
+### Changed
+
+- 版本号从2.0.12递增到2.0.13（触发完整CI/CD流程）
+- Docker镜像已构建但无法启动（请勿使用）
+
+---
+
 ## [2.0.12] - 2025-11-15
 
 ### Fixed
