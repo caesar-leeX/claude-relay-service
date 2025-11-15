@@ -103,6 +103,27 @@ async function handleMessagesRequest(req, res) {
     // 检查是否为流式请求
     const isStream = req.body.stream === true
 
+    // Context Management Beta功能处理（PR #666智能修复）
+    // 官方文档：https://github.com/anthropics/anthropic-sdk-python/blob/main/examples/memory/basic.py
+    if (req.body.context_management) {
+      const betaHeader = req.headers['anthropic-beta'] || ''
+      // 官方API常量（来自所有Anthropic SDK源代码）
+      const requiredBeta = 'context-management-2025-06-27'
+
+      if (betaHeader.includes(requiredBeta)) {
+        logger.debug(
+          `Context management enabled: ${req.apiKey.name}, ` +
+            `config: ${JSON.stringify(req.body.context_management)}`
+        )
+      } else {
+        logger.warn(
+          `Removing context_management (missing beta header '${requiredBeta}'): ` +
+            `key=${req.apiKey.name}, client=${req.headers['user-agent'] || 'unknown'}`
+        )
+        delete req.body.context_management
+      }
+    }
+
     logger.api(
       `🚀 Processing ${isStream ? 'stream' : 'non-stream'} request for key: ${req.apiKey.name}`
     )
