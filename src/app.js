@@ -372,8 +372,8 @@ class Application {
         }
       })
 
-      // 🚫 404 处理
-      this.app.use('*', (req, res) => {
+      // 🚫 404 处理 (Express 5: 移除 '*' 通配符，直接匹配所有未处理请求)
+      this.app.use((req, res) => {
         res.status(404).json({
           error: 'Not Found',
           message: `Route ${req.originalUrl} not found`,

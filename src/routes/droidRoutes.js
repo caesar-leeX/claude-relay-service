@@ -107,8 +107,8 @@ router.post(['/openai/v1/responses', '/openai/responses'], authenticateApiKey, a
   }
 })
 
-// 模型列表端点（兼容性）
-router.get('/*prefix/v1/models', authenticateApiKey, async (req, res) => {
+// 模型列表端点（兼容性）- Express 5: 使用命名参数替代 /*prefix
+router.get('/:prefix/v1/models', authenticateApiKey, async (req, res) => {
   try {
     // 返回可用的模型列表
     const models = [
