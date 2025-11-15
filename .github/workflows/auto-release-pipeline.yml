@@ -119,14 +119,21 @@ jobs:
         # 版本比较函数
         function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
 
-        # 检查是否手动设置了目标版本（VERSION 文件 > 最新 tag）
-        if version_gt "$FILE_VERSION" "$TAG_VERSION"; then
-          # 手动版本控制：直接使用 VERSION 文件中的版本
+        # 检查VERSION文件是否在当前commit中被修改
+        VERSION_CHANGED=$(git diff --name-only HEAD~1..HEAD 2>/dev/null | grep -q "^VERSION$" && echo "true" || echo "false")
+
+        if [ "$VERSION_CHANGED" = "true" ]; then
+          # VERSION文件在本次commit中被修改 → 手动版本控制
           NEW_VERSION="$FILE_VERSION"
           echo "🎯 Manual version control detected"
-          echo "   Latest tag: $TAG_VERSION"
-          echo "   VERSION file: $FILE_VERSION"
-          echo "   Using manual version: $NEW_VERSION"
+          echo "   Reason: VERSION file modified in current commit"
+          echo "   Using VERSION file: $NEW_VERSION"
+        elif version_gt "$FILE_VERSION" "$TAG_VERSION"; then
+          # VERSION文件 > 最新tag → 手动版本控制（保留原有逻辑）
+          NEW_VERSION="$FILE_VERSION"
+          echo "🎯 Manual version control detected"
+          echo "   Reason: VERSION file ($FILE_VERSION) > latest tag ($TAG_VERSION)"
+          echo "   Using VERSION file: $NEW_VERSION"
         else
           # 自动版本递增：原有逻辑
           echo "🤖 Automatic version bump"
