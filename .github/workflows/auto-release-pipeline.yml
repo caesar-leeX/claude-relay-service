@@ -119,23 +119,35 @@ jobs:
         # 版本比较函数
         function version_gt() { test "$(printf '%s\n' "$@" | sort -V | head -n 1)" != "$1"; }
 
+        # 获取最新成功 Release 的版本（不是 tag！）
+        # Release 只有在完整 workflow 成功后才创建，比 tag 更可靠
+        LATEST_RELEASE_VERSION=$(gh release view --json tagName -q .tagName 2>/dev/null | sed 's/^v//' || echo "0.0.0")
+
         # 检查VERSION文件是否在当前commit中被修改
         VERSION_CHANGED=$(git diff --name-only HEAD~1..HEAD 2>/dev/null | grep -q "^VERSION$" && echo "true" || echo "false")
 
         if [ "$VERSION_CHANGED" = "true" ]; then
-          # VERSION文件在本次commit中被修改 → 手动版本控制
+          # 优先级1：VERSION文件在本次commit中被修改 → 手动版本控制
           NEW_VERSION="$FILE_VERSION"
           echo "🎯 Manual version control detected"
           echo "   Reason: VERSION file modified in current commit"
           echo "   Using VERSION file: $NEW_VERSION"
         elif version_gt "$FILE_VERSION" "$TAG_VERSION"; then
-          # VERSION文件 > 最新tag → 手动版本控制（保留原有逻辑）
+          # 优先级2：VERSION文件 > 最新tag → 手动版本控制（保留原有逻辑）
           NEW_VERSION="$FILE_VERSION"
           echo "🎯 Manual version control detected"
           echo "   Reason: VERSION file ($FILE_VERSION) > latest tag ($TAG_VERSION)"
           echo "   Using VERSION file: $NEW_VERSION"
+        elif [ "$FILE_VERSION" != "$LATEST_RELEASE_VERSION" ]; then
+          # 优先级3：VERSION文件 ≠ 最新Release → 手动版本控制（新增逻辑）
+          # 这处理了 VERSION-modifying commit 创建了 tag 但在 build 阶段失败的情况
+          NEW_VERSION="$FILE_VERSION"
+          echo "🎯 Manual version control detected"
+          echo "   Reason: VERSION file ($FILE_VERSION) differs from latest release ($LATEST_RELEASE_VERSION)"
+          echo "   This handles the case where a VERSION-modifying commit created a tag but failed at build"
+          echo "   Using VERSION file: $NEW_VERSION"
         else
-          # 自动版本递增：原有逻辑
+          # 优先级4：自动版本递增（原有逻辑）
           echo "🤖 Automatic version bump"
           echo "   Current version: $VERSION"
 
