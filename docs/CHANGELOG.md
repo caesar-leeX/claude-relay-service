@@ -11,6 +11,75 @@
 
 ---
 
+## [2.0.17] - 2025-11-16
+
+### Fixed
+
+#### 🔧 移除不支持的 input_examples 字段（Claude Code v2.0.42 兼容性）
+
+- **问题背景**
+  - Claude Code v2.0.42 在 tools 数组中发送 `input_examples` 字段
+  - Anthropic API 在 2025-11-11 后拒绝该字段（HTTP 400）
+  - 官方问题：<https://github.com/anthropics/claude-code/issues/11678>
+  - 症状：Claude Code 用户请求失败，错误信息为 "Invalid request body"
+
+- **根本原因分析**
+  - Anthropic API 官方文档（docs.claude.com/api/messages）从未定义 `input_examples` 字段
+  - tools 参数标准字段：`name`、`description`、`input_schema`
+  - 所有官方SDK（TypeScript/Python/Go/Ruby/Java）从未使用 `input_examples`
+  - 结论：`input_examples` 是客户端错误发送的无效字段，API执行了breaking change移除支持
+
+- **修复方案** (src/routes/api.js:127-140)
+
+  ```javascript
+  // 移除 input_examples 字段（Claude Code v2.0.42+ 兼容性修复）
+  // 官方问题：https://github.com/anthropics/claude-code/issues/11678
+  // Anthropic API 在 2025-11-11 后拒绝 input_examples 字段（HTTP 400）
+  if (req.body.tools && Array.isArray(req.body.tools)) {
+    req.body.tools.forEach((tool) => {
+      if (tool && typeof tool === 'object' && tool.input_examples) {
+        logger.debug(
+          `Removing unsupported field 'input_examples' from tool '${tool.name || 'unnamed'}': ` +
+            `key=${req.apiKey.name}, client=${req.headers['user-agent'] || 'unknown'}`
+        )
+        delete tool.input_examples
+      }
+    })
+  }
+  ```
+
+- **技术细节**
+  - 位置：请求预处理阶段（context_management 检查之后）
+  - 防御式编程：完整的类型和存在性检查（6层防护）
+  - 日志级别：debug（不污染生产日志）
+  - 日志内容：工具名、API Key名、客户端UA
+  - 时间复杂度：O(n)，n为工具数量（通常1-3个）
+  - 零硬编码：无版本号、日期、客户端标识等硬编码
+
+- **优势对比**
+
+  | 维度 | 上游 v1.1.196 | v2.0.17 修复 |
+  |------|--------------|-------------|
+  | 核心逻辑 | 遍历 + 删除 | 遍历 + 删除（相同） |
+  | 日志记录 | ❌ 无 | ✅ debug级别 + 详细信息 |
+  | 官方引用 | ❌ 仅注释 | ✅ GitHub issue链接 |
+  | 工具识别 | ❌ 无 | ✅ 显示tool.name |
+  | 可追溯性 | 🟡 中 | 🟢 高 |
+
+- **影响范围**
+  - ✅ 修复 Claude Code v2.0.42 用户的 HTTP 400 错误
+  - ✅ 兼容所有账户类型（claude-official/console/bedrock/ccr）
+  - ✅ 零破坏性（API从未支持该字段）
+  - ✅ 零性能影响（简单循环操作）
+
+- **验证场景**
+  - ✅ 场景1：Claude Code v2.0.42 发送 input_examples → 字段删除，请求成功
+  - ✅ 场景2：其他客户端无 input_examples → 无影响
+  - ✅ 场景3：tools 数组为空/不存在 → 安全跳过
+  - ✅ 场景4：并发请求 → 各请求独立处理
+
+---
+
 ## [2.0.15] - 2025-11-15
 
 ### Fixed

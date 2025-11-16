@@ -124,6 +124,21 @@ async function handleMessagesRequest(req, res) {
       }
     }
 
+    // 移除 input_examples 字段（Claude Code v2.0.42+ 兼容性修复）
+    // 官方问题：https://github.com/anthropics/claude-code/issues/11678
+    // Anthropic API 在 2025-11-11 后拒绝 input_examples 字段（HTTP 400）
+    if (req.body.tools && Array.isArray(req.body.tools)) {
+      req.body.tools.forEach((tool) => {
+        if (tool && typeof tool === 'object' && tool.input_examples) {
+          logger.debug(
+            `Removing unsupported field 'input_examples' from tool '${tool.name || 'unnamed'}': ` +
+              `key=${req.apiKey.name}, client=${req.headers['user-agent'] || 'unknown'}`
+          )
+          delete tool.input_examples
+        }
+      })
+    }
+
     logger.api(
       `🚀 Processing ${isStream ? 'stream' : 'non-stream'} request for key: ${req.apiKey.name}`
     )
