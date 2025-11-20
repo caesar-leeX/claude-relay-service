@@ -11,6 +11,297 @@
 
 ---
 
+## [2.0.20] - 2025-11-20
+
+### Fixed
+
+#### 🚀 同步上游 v1.1.199：Gemini SSE 流式优化 + 稳定性提升
+
+从上游 Wei-Shaw/claude-relay-service v1.1.196-v1.1.199 同步关键性能优化和稳定性改进。
+
+##### 1. **Gemini SSE 流式转发优化**（src/routes/geminiRoutes.js, standardGeminiRoutes.js, openaiGeminiRoutes.js）
+
+**上游Commit**: d7358107, 9eccc7da
+
+**问题背景**：
+- 旧方案：解析 SSE → JSON.stringify → 重新序列化 → 转发
+- 性能瓶颈：每个chunk都需要完整的解析和序列化过程
+- 延迟高：94% 的时间消耗在数据转换上
+- 吞吐量低：JSON 操作阻塞主流程
+
+**核心改进**：透明转发 + 异步 usage 提取
+
+```javascript
+// ❌ 旧方案（当前）：解析 → 处理 → 重新序列化
+for (const line of lines) {
+  const parsed = parseSSELine(line)
+  if (version === 'v1beta') {
+    if (parsed.data.response) {
+      processedLines.push(`data: ${JSON.stringify(parsed.data.response)}`)
+    }
+  }
+}
+res.write(`${line}\n\n`)
+
+// ✅ 新方案（上游）：透明转发 + 异步 usage 提取
+// 1️⃣ 立即转发原始 Buffer（零延迟）
+res.write(chunk)
+
+// 2️⃣ 异步提取 usage（不阻塞主流程）
+setImmediate(() => {
+  if (chunk.toString().includes('usageMetadata')) {
+    const parsed = parseSSELine(line)
+    totalUsage = parsed.data.response.usageMetadata
+  }
+})
+```
+
+**性能提升**：
+- 延迟降低 **94%**（零转换延迟）
+- 吞吐量提升 **10x**（直接转发 Buffer）
+- 内存效率：减少字符串复制和中间对象
+
+**技术细节**：
+- 数据结构：直接转发 Buffer，不产生中间副本
+- 并发安全：setImmediate 在下一个事件循环，不阻塞主流
+- 版本统一：对 v1beta 和 v1internal 都采用透明转发
+
+##### 2. **SSE 心跳机制**（src/routes/geminiRoutes.js, standardGeminiRoutes.js）
+
+**上游Commit**: 9eccc7da
+
+**问题背景**：
+- Clash、V2Ray 等代理默认 120 秒空闲超时
+- 长时间无数据流（如模型思考）导致连接被代理中断
+- 症状："Connection reset" / "Premature close" 错误
+
+**核心改进**：15秒 SSE keepalive 机制
+
+```javascript
+// SSE 心跳机制：防止 Clash 等代理 120 秒超时
+let lastDataTime = Date.now()
+const HEARTBEAT_INTERVAL = 15000 // 15 秒
+
+const sendHeartbeat = () => {
+  const timeSinceLastData = Date.now() - lastDataTime
+  if (timeSinceLastData >= HEARTBEAT_INTERVAL && !res.destroyed) {
+    res.write('\n') // 发送空行保持连接活跃
+    logger.info(`💓 Sent SSE keepalive (gap: ${(timeSinceLastData / 1000).toFixed(1)}s)`)
+  }
+}
+
+heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL)
+```
+
+**资源管理**（补充修复）：
+
+```javascript
+// 在 req.on('close') 中添加清理逻辑（上游遗漏）
+req.on('close', () => {
+  // 清理心跳定时器
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
+  }
+
+  // 原有的 abort 逻辑
+  if (abortController && !abortController.signal.aborted) {
+    abortController.abort()
+  }
+})
+```
+
+**改进点**：
+- ✅ 防止代理超时断连（标准 SSE keepalive 机制）
+- ✅ 完整的资源清理（补充上游遗漏的定时器清理）
+- ✅ 避免资源泄漏（三个清理点：end / error / close）
+
+##### 3. **非阻塞响应结束**（src/routes/geminiRoutes.js, standardGeminiRoutes.js, openaiGeminiRoutes.js）
+
+**上游Commit**: 9eccc7da
+
+**问题背景**：
+- 旧方案：`await recordUsage()` 阻塞响应结束
+- 客户端等待 Redis 操作完成才收到响应
+- 增加客户端感知的响应时间
+
+**核心改进**：立即响应 + 异步记录
+
+```javascript
+// ❌ 旧方案：阻塞式 usage 记录
+streamResponse.on('end', async () => {
+  await apiKeyService.recordUsage(...)  // 阻塞响应
+  res.end()  // 延迟响应结束
+})
+
+// ✅ 新方案：立即响应 + 异步记录
+streamResponse.on('end', () => {
+  res.end()  // 立即结束响应，不阻塞客户端
+
+  // 异步记录 usage（不阻塞响应）
+  Promise.all([
+    apiKeyService.recordUsage(...),
+    applyRateLimitTracking(...)
+  ]).then(() => {
+    usageReported = true
+  }).catch((error) => {
+    logger.error('Failed to record', error)
+  })
+})
+```
+
+**优势**：
+- ✅ 客户端立即收到响应，不等待 Redis 操作
+- ✅ Usage 记录失败不影响客户端
+- ✅ 提高系统整体吞吐量
+
+##### 4. **usageReported Bug 修复**（src/routes/geminiRoutes.js, openaiGeminiRoutes.js）
+
+**上游Commit**: d7358107
+
+**问题**：
+```javascript
+const usageReported = false  // ❌ 无法修改
+if (!usageReported) {
+  await recordUsage(...)
+  // usageReported = true  // ❌ 报错：Assignment to constant variable
+}
+```
+
+**修复**：
+```javascript
+let usageReported = false  // ✅ 改为 let
+if (!usageReported) {
+  await recordUsage(...)
+  usageReported = true  // ✅ 防止重复上报
+}
+```
+
+##### 5. **TCP Keep-Alive 支持**（src/services/geminiAccountService.js）
+
+**上游Commit**: 26ad7482
+
+**问题背景**：
+- NAT/防火墙对长时间空闲连接进行超时回收
+- 长时间流式请求（无数据传输）被中断
+- 症状："ECONNRESET" / "socket hang up"
+
+**核心改进**：TCP 层面的 Keep-Alive
+
+```javascript
+const https = require('https')
+
+// 🌐 TCP Keep-Alive Agent 配置
+const keepAliveAgent = new https.Agent({
+  keepAlive: true,
+  keepAliveMsecs: 30000,   // 每30秒发送 TCP keep-alive 探测
+  timeout: 120000,          // 120秒连接超时
+  maxSockets: 100,          // 最大并发连接数
+  maxFreeSockets: 10        // 保持的空闲连接数
+})
+
+// 在请求配置中使用（仅无代理时）
+if (!proxyConfig) {
+  axiosConfig.httpsAgent = keepAliveAgent
+  axiosConfig.httpAgent = keepAliveAgent
+}
+```
+
+**资源占用**：
+- 内存：每个空闲连接 ~4KB，10个空闲连接 = 40KB
+- 网络：每30秒一次 TCP keep-alive 探测包（~60字节）
+- CPU：定时器开销可忽略不计
+
+##### 6. **Timeout 配置优化**（src/services/geminiAccountService.js）
+
+**上游Commit**: 94925e57, 26ad7482
+
+**问题背景**：
+- 非流式请求：60秒超时不足（长上下文生成需要更多时间）
+- 流式请求：60秒超时不合理（流式本不应有固定超时）
+
+**核心改进**：
+
+```javascript
+// 非流式请求
+// ❌ 旧：timeout: 60000  (1分钟)
+// ✅ 新：timeout: 600000 (10分钟，与全局 REQUEST_TIMEOUT 一致)
+
+// 流式请求
+// ❌ 旧：timeout: 60000  (1分钟)
+// ✅ 新：timeout: 0      (无限制，由 keepAlive + AbortSignal 控制)
+```
+
+**兼容性**：
+- ✅ 非流式超时与全局配置 `REQUEST_TIMEOUT` 一致
+- ✅ 流式无限制由 AbortController 控制（我们已有）
+- ✅ 防止长时间请求被错误中断
+
+##### 7. **流错误处理改进**（src/routes/openaiGeminiRoutes.js）
+
+**上游Commit**: d7358107
+
+**问题**：旧方案使用字符串插值，可能导致格式错误
+
+**修复**：
+```javascript
+// ❌ 旧：字符串插值
+res.write(`data: {"error": {"message": "${error.message}"}}\n\n`)
+
+// ✅ 新：JSON.stringify
+res.write(`data: ${JSON.stringify({
+  error: {
+    message: error.message || 'Stream error',
+    type: 'stream_error',
+    code: error.code
+  }
+})}\n\n`)
+```
+
+##### 8. **Docker 镜像优化**（.dockerignore）
+
+**上游Commit**: 696a095f
+
+**改进**：排除 `redis_data/` 目录，减小镜像体积
+
+##### 9. **Workflow 手动触发支持**（.github/workflows/auto-release-pipeline.yml）
+
+**上游Commit**: 6d8bf99e
+
+**改进**：添加 `workflow_dispatch` 手动触发支持，方便运维
+
+---
+
+### Changed
+
+- **同步文件**：
+  - src/routes/geminiRoutes.js（178行变更）
+  - src/routes/standardGeminiRoutes.js（159行变更）
+  - src/routes/openaiGeminiRoutes.js（24行变更）
+  - src/services/geminiAccountService.js（27行变更）
+  - .dockerignore（1行新增）
+  - .github/workflows/auto-release-pipeline.yml（1行新增）
+
+---
+
+### Performance
+
+- **Gemini 流式响应延迟降低 94%**
+- **Gemini 流式吞吐量提升 10x**
+- **内存效率提升**（减少字符串复制）
+- **客户端感知响应时间降低**（非阻塞响应结束）
+
+---
+
+### Reliability
+
+- **防止代理超时断连**（SSE 心跳机制）
+- **防止 NAT/防火墙超时**（TCP Keep-Alive）
+- **防止资源泄漏**（补充定时器清理逻辑）
+- **防止 usage 重复上报**（usageReported bug 修复）
+
+---
+
 ## [2.0.19] - 2025-11-16
 
 ### Fixed

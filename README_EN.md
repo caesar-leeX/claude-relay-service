@@ -9,7 +9,7 @@
 
 **🔐 Self-hosted Claude API relay service with multi-account management** 
 
-[中文文档](README.md) • [Preview](https://demo.pincc.ai/admin-next/login) • [Telegram Channel](https://t.me/claude_relay_service)
+[中文文档](README.md) 
 
 </div>
 
