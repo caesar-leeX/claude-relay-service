@@ -11,6 +11,148 @@
 
 ---
 
+## [2.0.21] - 2025-11-21
+
+### Fixed
+
+#### 🚨 修复 Gemini 转发未响应问题 (upstream v1.1.201)
+
+**上游Commit**: 823be8ac
+
+**问题原因**:
+同时设置 `httpAgent` 和 `httpsAgent` 导致 axios/follow-redirects 选择错误的协议，造成 Gemini 请求无响应。
+
+**修复内容**:
+
+- 删除不必要的 `httpAgent` 配置（目标 URL 均为 HTTPS）
+- 只保留 `httpsAgent` 配置，避免协议选择错误
+
+**影响文件**:
+
+- `src/services/geminiAccountService.js`: 删除 6 处 `httpAgent` 设置
+- `src/services/geminiRelayService.js`: 删除 3 处 `httpAgent` 设置
+
+**受影响的函数**:
+
+- `forwardToCodeAssist()` - Gemini Code Assist 转发
+- `loadCodeAssist()` - Code Assist 加载
+- `countTokens()` - Token 计数
+- `generateContent()` - 内容生成（proxyAgent 和 keepAliveAgent）
+- `generateContentStream()` - 流式内容生成（proxyAgent 和 keepAliveAgent）
+- `sendGeminiRequest()` - Gemini 请求发送
+- `getAvailableModels()` - 获取可用模型
+
+**技术细节**:
+```javascript
+// ❌ 旧：同时设置两个 Agent（可能导致协议选择错误）
+axiosConfig.httpAgent = proxyAgent
+axiosConfig.httpsAgent = proxyAgent
+
+// ✅ 新：只设置 httpsAgent（目标 URL 是 HTTPS）
+axiosConfig.httpsAgent = proxyAgent
+// 注释：只设置 httpsAgent，因为目标 URL 是 HTTPS (cloudcode-pa.googleapis.com)
+// 同时设置 httpAgent 和 httpsAgent 可能导致 axios/follow-redirects 选择错误的协议
+```
+
+**依赖信息**:
+
+- axios@1.11.0
+- follow-redirects@1.15.11
+
+**影响范围**:
+
+- ✅ 仅影响 Gemini 服务
+- ✅ 不影响其他服务（Claude、Bedrock、Azure、Droid、CCR、OpenAI）
+- ✅ 零破坏性，完全向后兼容
+
+---
+
+### Added
+
+#### 🆕 支持 Codex compact 端点 (upstream v1.1.200)
+
+**上游Commit**: 9b0a1f9b
+
+**新功能**:
+支持 OpenAI Codex compact 端点，提供更快的响应速度和精简的响应格式。
+
+**核心改进**:
+
+1. **新增路由**: `/responses/compact` 和 `/v1/responses/compact`
+2. **智能端点选择**: 根据路由自动选择 standard 或 compact 端点
+3. **store 参数适配**: compact 请求自动删除 store 参数（避免 400 错误）
+
+**技术实现**:
+```javascript
+// 路由检测
+const isCompactRoute =
+  req.path === '/responses/compact' ||
+  req.path === '/v1/responses/compact' ||
+  (req.originalUrl && req.originalUrl.includes('/responses/compact'))
+
+// 端点选择
+const codexEndpoint = isCompactRoute
+  ? 'https://chatgpt.com/backend-api/codex/responses/compact'
+  : 'https://chatgpt.com/backend-api/codex/responses'
+
+// store 参数处理
+if (!isCompactRoute) {
+  req.body['store'] = false  // standard: 设置为 false
+} else if (req.body && Object.prototype.hasOwnProperty.call(req.body, 'store')) {
+  delete req.body['store']   // compact: 删除参数（compact 端点不接受此参数）
+}
+```
+
+**影响文件**:
+
+- `src/routes/openaiRoutes.js`: 新增 19 行，删除 7 行（净增 12 行）
+
+**适用场景**:
+
+- ✅ 使用 OpenAI Codex API 的用户
+- ✅ 需要更快响应速度的场景
+- ✅ 需要精简响应格式的场景
+
+**向后兼容**:
+
+- ✅ 原有 `/responses` 和 `/v1/responses` 路由行为完全不变
+- ✅ 新路由为可选功能，用户主动选择
+- ✅ 零破坏性
+
+---
+
+### Changed
+
+- **VERSION**: 2.0.20 → 2.0.21
+- **package.json**: 2.0.20 → 2.0.21
+
+---
+
+### Technical Notes
+
+**合并验证**:
+
+- ✅ **自定义修改完全保留**: 我们在 v2.0.20 中添加的 heartbeatTimer 清理逻辑完整保留
+- ✅ **零文件冲突**: v1.1.200 和 v1.1.201 修改的文件与我们自定义修改的文件完全不重叠
+- ✅ **代码一致性**: 合并后的代码与上游 main 分支完全一致（除我们的自定义修改）
+
+**自定义修改状态**:
+
+- ✅ `src/routes/geminiRoutes.js`: heartbeatTimer 清理（修复上游资源泄漏）- 保留
+- ✅ `src/routes/standardGeminiRoutes.js`: heartbeatTimer 清理 - 保留
+- ✅ `README.md`: 定制修改（删除 demo 链接）- 保留
+
+**审计结果**:
+
+- 🟢 **数据结构**: 好品味（v1.1.201 消除多余配置；v1.1.200 清晰的路由驱动）
+- 🟢 **复杂度**: 简洁（v1.1.201 降低复杂度 2→1；v1.1.200 最深 1 层嵌套）
+- 🟢 **破坏性**: 零破坏性（两个更新完全向后兼容）
+- 🟢 **实用性**: 解决真实问题（v1.1.201 修复关键 bug；v1.1.200 提供实用功能）
+- ✅ **硬编码**: 通过（v1.1.201 无硬编码；v1.1.200 仅 API 端点常量）
+- ✅ **连锁问题**: 通过（零连锁影响，完全隔离）
+
+---
+
 ## [2.0.20] - 2025-11-20
 
 ### Fixed
