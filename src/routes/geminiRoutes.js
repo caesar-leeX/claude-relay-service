@@ -879,12 +879,6 @@ async function handleStreamGenerateContent(req, res) {
 
     // 处理客户端断开连接
     req.on('close', () => {
-      // 清理心跳定时器
-      if (heartbeatTimer) {
-        clearInterval(heartbeatTimer)
-        heartbeatTimer = null
-      }
-
       if (abortController && !abortController.signal.aborted) {
         logger.info('Client disconnected, aborting stream request')
         abortController.abort()
