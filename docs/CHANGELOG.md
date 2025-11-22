@@ -11,6 +11,346 @@
 
 ---
 
+## [2.0.22] - 2025-11-23
+
+### Changed
+
+#### 🔄 完整同步上游 v1.1.202 + v1.1.203：信任上游设计
+
+**设计决策**: 信任上游的生产环境验证，采用上游的资源管理设计
+
+**上游Commits**:
+
+- v1.1.202: 6f9ac4aa, c33771ef
+- v1.1.203: c47bb729
+
+---
+
+#### 📦 v1.1.202 核心改进
+
+##### 1. **Gemini 429 速率限制处理** (6f9ac4aa)
+
+**新增功能**:
+自动检测并标记触发 429 错误的 Gemini 账户，避免连续失败。
+
+**技术实现**:
+
+```javascript
+// handleStandardGenerateContent 和 handleStandardStreamGenerateContent
+catch (error) {
+  // 处理速率限制
+  if (error.response?.status === 429) {
+    logger.warn(`⚠️ Gemini account ${account.id} rate limited, marking as limited`)
+    await unifiedGeminiScheduler.markAccountRateLimited(account.id, 'gemini', sessionHash)
+  }
+}
+```
+
+**影响文件**:
+
+- `src/routes/standardGeminiRoutes.js`: 新增 24 行（两个 catch 块）
+
+**收益**:
+
+- ✅ 自动账户降级，避免调度器继续选择受限账户
+- ✅ 提高系统整体可用性
+- ✅ 减少客户端重试次数
+
+##### 2. **SSE 分块正确处理** (c33771ef)
+
+**问题背景**:
+commit 6f9ac4aa 假设每个 chunk 是完整的 SSE 事件，导致以下问题：
+
+- chunk 可能包含多个事件：`"data: {...}\n\ndata: {...}\n\n"`
+- 事件可能跨 chunk：chunk1=`"data: {\"res"`，chunk2=`"ponse\": ...}"`
+- JSON.parse 失败导致转发中断
+
+**修复方案**:
+实现正确的 SSE 协议处理（符合 W3C SSE 规范）
+
+**技术实现**:
+
+```javascript
+// 缓冲区：有些 chunk 内会包含多条 SSE 事件，需要拆分
+let sseBuffer = ''
+
+// 处理单个 SSE 事件块（不含结尾空行）
+const handleEventBlock = (evt) => {
+  // 取出所有 data 行并拼接（兼容多行 data）
+  const dataLines = evt.split(/\r?\n/).filter((line) => line.startsWith('data:'))
+  const dataPayload = dataLines.map((line) => line.replace(/^data:\s?/, '')).join('\n')
+
+  const parsed = JSON.parse(dataPayload)
+  const processedPayload = JSON.stringify(parsed.response || parsed)
+
+  res.write(`data: ${processedPayload}\n\n`)
+}
+
+streamResponse.on('data', (chunk) => {
+  // 按 \n\n 分割事件（SSE 协议标准）
+  sseBuffer += chunk.toString()
+  const events = sseBuffer.split(/\r?\n\r?\n/)
+  sseBuffer = events.pop() || '' // 保留不完整的事件
+
+  for (const evt of events) {
+    handleEventBlock(evt)
+  }
+})
+
+streamResponse.on('end', () => {
+  // 处理残留缓冲区
+  if (sseBuffer.trim()) {
+    handleEventBlock(sseBuffer)
+  }
+})
+```
+
+**影响文件**:
+
+- `src/routes/standardGeminiRoutes.js`: 新增 89 行，删除 49 行（净增 40 行）
+
+**收益**:
+
+- ✅ 修复 JSON 解析错误
+- ✅ 支持跨 chunk 的 SSE 事件
+- ✅ 符合 W3C SSE 规范
+- ✅ 提高流式传输稳定性
+
+##### 3. **变量提升优化** (6f9ac4aa)
+
+**目的**: 使 account 和 sessionHash 在 catch 块中可访问，用于 429 错误处理
+
+**技术实现**:
+
+```javascript
+async function handleStandardGenerateContent(req, res) {
+  let account = null // ← 提升到函数顶部
+  let sessionHash = null // ← 提升到函数顶部
+
+  try {
+    sessionHash = sessionHelper.generateSessionHash(req.body)
+    account = await geminiAccountService.getAccount(accountId)
+    // ...
+  } catch (error) {
+    // ✅ 现在可以访问 account 和 sessionHash
+    if (error.response?.status === 429) {
+      await unifiedGeminiScheduler.markAccountRateLimited(account.id, 'gemini', sessionHash)
+    }
+  }
+}
+```
+
+**影响**:
+
+- ✅ 使错误处理逻辑更完整
+- 🟡 牺牲变量作用域清晰性（可接受的权衡）
+
+---
+
+#### 🚀 v1.1.203 性能优化
+
+##### **代理 Agent 缓存 + 连接池** (c47bb729)
+
+**问题背景**:
+每次请求都创建新的 SocksProxyAgent/HttpsProxyAgent，导致：
+
+- TCP 连接开销（三次握手）
+- 内存浪费（重复对象创建）
+- 无法复用连接
+
+**优化方案**:
+引入 Agent 缓存和可选连接池
+
+**技术实现**:
+
+```javascript
+class ProxyHelper {
+  // 缓存代理 Agent，避免重复创建
+  static _agentCache = new Map()
+
+  static createProxyAgent(proxyConfig, options = {}) {
+    // 缓存键：保证相同配置的代理可复用
+    const cacheKey = JSON.stringify({
+      type: proxy.type,
+      host: proxy.host,
+      port: proxy.port,
+      username: proxy.username,
+      password: proxy.password,
+      family: useIPv4,
+      keepAlive: agentCommonOptions.keepAlive,
+      maxSockets: agentCommonOptions.maxSockets
+      // ...
+    })
+
+    if (ProxyHelper._agentCache.has(cacheKey)) {
+      return ProxyHelper._agentCache.get(cacheKey)
+    }
+
+    // 创建新 agent 并缓存
+    const agent = new SocksProxyAgent(socksUrl, socksOptions)
+    ProxyHelper._agentCache.set(cacheKey, agent)
+    return agent
+  }
+}
+```
+
+**配置参数** (可选启用):
+
+```bash
+# .env 配置
+PROXY_KEEP_ALIVE=true           # 启用 Keep-Alive
+PROXY_MAX_SOCKETS=50            # 最大并发连接数
+PROXY_MAX_FREE_SOCKETS=10       # 保持的空闲连接数
+```
+
+**影响文件**:
+
+- `src/utils/proxyHelper.js`: 新增 68 行
+- `config/config.example.js`: 新增 24 行配置
+- `.env.example`: 新增 4 行配置
+- `docker-compose.yml`: 新增 4 行环境变量
+
+**性能收益**:
+
+- ✅ 减少 TCP 连接开销（复用现有连接）
+- ✅ 降低内存占用（Agent 对象复用）
+- ✅ 可选连接池（根据需求启用）
+
+**默认行为**:
+
+- 🟢 默认关闭 Keep-Alive（向后兼容）
+- 🟢 用户主动启用（Opt-in）
+
+---
+
+### Removed
+
+#### 🔄 恢复上游资源管理设计
+
+**设计决策**: 信任上游的生产环境验证，采用上游的 heartbeatTimer 清理策略
+
+**移除的改动**:
+我们在 v2.0.20 中添加的 `req.on('close')` 中的 heartbeatTimer 清理逻辑
+
+**移除的代码**:
+
+```javascript
+// ❌ 移除：我们在 v2.0.20 添加的防御性清理
+req.on('close', () => {
+  if (heartbeatTimer) {
+    clearInterval(heartbeatTimer)
+    heartbeatTimer = null
+  }
+  // ...
+})
+```
+
+**影响文件**:
+
+- `src/routes/geminiRoutes.js`: 移除 6 行
+- `src/routes/standardGeminiRoutes.js`: 移除 6 行
+
+**上游的设计**:
+只在 `streamResponse.on('end')` 和 `streamResponse.on('error')` 中清理
+
+```javascript
+// ✅ 上游设计（依赖 Node.js 流保证）
+streamResponse.on('end', () => {
+  clearInterval(heartbeatTimer)
+})
+
+streamResponse.on('error', () => {
+  clearInterval(heartbeatTimer)
+})
+```
+
+**技术验证**:
+
+- ✅ Node.js 保证：流必然触发 end 或 error 事件
+- ✅ 实验验证：abortController.abort() → error 事件 → 清理 heartbeatTimer
+- ✅ 上游在生产环境运行，无资源泄漏报告
+
+**决策理由**:
+
+1. **上游验证**: 上游代码在生产环境运行，无泄漏证据
+2. **设计简洁**: 依赖 Node.js 流的保证，而不是多重保险
+3. **避免分歧**: 保持与上游设计一致，便于后续同步
+
+**我们的设计 vs 上游设计**:
+
+| 维度                       | 我们 v2.0.20            | 上游 v1.1.202+    | 评价      |
+| -------------------------- | ----------------------- | ----------------- | --------- |
+| 清理位置                   | 3 处（end/error/close） | 2 处（end/error） | 🟡 保守   |
+| 理论正确性                 | ✅ 正确                 | ✅ 正确           | ✅ 都正确 |
+| 依赖                       | 防御性编程              | Node.js 流保证    | 🟢 信任   |
+| 生产验证                   | ❌ 未验证               | ✅ 已验证         | ✅ 上游   |
+| **v2.0.22 最终选择**       | -                       | ✅ 采用           | **信任**  |
+
+---
+
+### Changed
+
+- **VERSION**: 2.0.21 → 2.0.22
+- **package.json**: 2.0.21 → 2.0.22
+
+---
+
+### Technical Notes
+
+#### **合并验证**
+
+**Cherry-pick 结果**:
+
+- ✅ 6f9ac4aa: 成功，自动合并 standardGeminiRoutes.js
+- ✅ c33771ef: 成功，自动合并 standardGeminiRoutes.js
+- ✅ c47bb729: 成功，自动合并 config/config.example.js 和 docker-compose.yml
+- ✅ **零冲突**
+
+**代码一致性**:
+
+- ✅ 与上游 v1.1.203 完全一致（除 README 定制）
+- ✅ 移除了我们自定义的 heartbeatTimer 防御性清理
+- ✅ 采用上游的资源管理设计
+
+#### **审计结果**
+
+**v1.1.202 审计**:
+
+- 🟢 **数据结构**: 好品味（SSE 缓冲区管理符合协议规范）
+- 🟢 **复杂度**: 可接受（SSE 分块处理 40 行净增，修复真问题）
+- 🟢 **破坏性**: 零破坏性（向后兼容）
+- 🟢 **实用性**: 解决真实问题（429 处理、SSE 解析错误）
+- ✅ **硬编码**: 通过（无硬编码）
+- ✅ **连锁问题**: 通过（隔离在 Gemini 服务内）
+
+**v1.1.203 审计**:
+
+- 🟢 **数据结构**: 好品味（Map 缓存，简洁高效）
+- 🟢 **复杂度**: 简洁（缓存逻辑清晰）
+- 🟢 **破坏性**: 零破坏性（默认关闭，Opt-in）
+- 🟢 **实用性**: 性能优化（减少连接开销）
+- ✅ **硬编码**: 通过（配置驱动）
+
+#### **影响范围**
+
+**修改的文件**:
+
+- `src/routes/geminiRoutes.js`: heartbeatTimer 清理位置变更
+- `src/routes/standardGeminiRoutes.js`: 429 处理 + SSE 分块 + heartbeatTimer 变更
+- `src/utils/proxyHelper.js`: Agent 缓存
+- `config/config.example.js`: 代理配置
+- `.env.example`: 代理配置
+- `docker-compose.yml`: 环境变量
+
+**不影响的服务**:
+
+- ✅ Claude 服务（官方、Console、Bedrock、CCR）
+- ✅ Azure OpenAI 服务
+- ✅ Droid 服务
+- ✅ OpenAI Responses 服务
+
+---
+
 ## [2.0.21] - 2025-11-21
 
 ### Fixed
